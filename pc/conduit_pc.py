@@ -711,6 +711,19 @@ def adb_keeper_loop():
         time.sleep(15)
 
 
+def phone_token() -> str:
+    """Shared secret the phone's listener requires (env, else ~/.config/conduit/token.env)."""
+    tok = os.environ.get("CLIPSYNC_TOKEN", "")
+    if not tok:
+        try:
+            for line in (Path.home() / ".config/conduit/token.env").read_text().splitlines():
+                if line.startswith("CLIPSYNC_TOKEN="):
+                    tok = line.split("=", 1)[1].strip()
+        except OSError:
+            pass
+    return tok
+
+
 def send_clipboard_to_phone() -> int:
     text = get_pc_clipboard()
     if not text:
@@ -729,7 +742,7 @@ def send_clipboard_to_phone() -> int:
         req = urllib.request.Request(
             f"http://{host}:{port}/clip",
             data=text.encode("utf-8"),
-            headers={"Content-Type": "text/plain; charset=utf-8"},
+            headers={"Content-Type": "text/plain; charset=utf-8", "X-Token": phone_token()},
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=1.3) as resp:

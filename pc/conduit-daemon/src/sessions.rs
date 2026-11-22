@@ -390,5 +390,6 @@ pub async fn prompt(req: PromptReq, tx: Option<Sender<Value>>) -> Result<Value, 
         t.summary()
     });
     Ok(json!({"status": "ok", "reply": reply, "model": summary["model"], "model_label": summary["model_label"],
-              "session_id": summary["id"], "conversation_id": new_conv, "session": summary}))
+              "session_id": summary["id"], "conversation_id": new_conv, "session": summary,
+              "files": crate::files::extract(&reply, &cwd)}))
 }

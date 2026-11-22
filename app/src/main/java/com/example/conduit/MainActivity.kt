@@ -147,7 +147,6 @@ fun ConduitIdeRoot(viewModel: MainViewModel) {
                 onPullClipboard = { viewModel.pullFromPc() },
                 onToggleService = { viewModel.toggleService(it) },
                 onUpdatePcHost = { viewModel.updatePcHost(it) },
-                onUpdateApiToken = { viewModel.updateApiToken(it) },
                 onDiscoverPc = { viewModel.discoverPc() },
                 onCopyHistory = { viewModel.copyToPhone(it) },
                 onResendHistory = { viewModel.sendText(it) }
@@ -200,7 +199,8 @@ fun ConduitIdeRoot(viewModel: MainViewModel) {
             onRefreshModels = { viewModel.refreshModels() },
             onSelectBaseModel = { viewModel.selectBaseModel(it) },
             onSelectEffort = { viewModel.selectEffort(it) },
-            onCopyText = { viewModel.copyToPhone(it) }
+            onCopyText = { viewModel.copyToPhone(it) },
+            onDownloadFiles = { viewModel.downloadFiles(it) }
         )
     }
 }

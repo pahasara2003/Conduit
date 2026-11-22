@@ -35,10 +35,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
@@ -89,6 +91,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.conduit.AiFile
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.window.Dialog
 import com.example.conduit.BaseModelGroup
 import com.example.conduit.ConduitState
@@ -131,7 +136,8 @@ fun IdeWorkspaceScreen(
     onRefreshModels: () -> Unit,
     onSelectBaseModel: (BaseModelGroup) -> Unit,
     onSelectEffort: (ReasoningEffort) -> Unit,
-    onCopyText: (String) -> Unit
+    onCopyText: (String) -> Unit,
+    onDownloadFiles: (List<AiFile>) -> Unit
 ) {
     val listState = rememberLazyListState()
     var showModelControl by remember { mutableStateOf(false) }
@@ -264,7 +270,8 @@ fun IdeWorkspaceScreen(
                             is WorkspaceItem.UserPrompt -> UserPromptPill(item)
                             is WorkspaceItem.AssistantResponse -> AssistantStreamBlock(
                                 item = item,
-                                onCopy = onCopyText
+                                onCopy = onCopyText,
+                                onDownloadFiles = onDownloadFiles
                             )
                             is WorkspaceItem.ToolExecution -> MinimalToolOutput(
                                 item = item,
@@ -468,7 +475,8 @@ private fun UserPromptPill(item: WorkspaceItem.UserPrompt) {
 @Composable
 private fun AssistantStreamBlock(
     item: WorkspaceItem.AssistantResponse,
-    onCopy: (String) -> Unit
+    onCopy: (String) -> Unit,
+    onDownloadFiles: (List<AiFile>) -> Unit
 ) {
     val segments = remember(item.text) { parseMarkdownSegments(item.text) }
 
@@ -555,6 +563,35 @@ private fun AssistantStreamBlock(
                 color = IdeTextMutedDark
             )
         }
+        if (item.files.isNotEmpty()) {
+            item.files.forEach { f -> FileChip("${f.name} · ${formatSize(f.size)}") { onDownloadFiles(listOf(f)) } }
+            if (item.files.size > 1) FileChip("Download all (${item.files.size} files, .zip)") { onDownloadFiles(item.files) }
+        }
+    }
+}
+
+private fun formatSize(b: Long): String = when {
+    b >= 1_048_576 -> "%.1f MB".format(b / 1_048_576.0)
+    b >= 1024 -> "%.0f KB".format(b / 1024.0)
+    else -> "$b B"
+}
+
+@Composable
+private fun FileChip(label: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(Icons.Rounded.Download, contentDescription = "Download", tint = IdeAccent, modifier = Modifier.size(18.dp))
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -601,86 +638,88 @@ private fun MarkdownInlineText(
         return
     }
 
-    // Render with rounded pills for inline code blocks
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        tokens.forEach { token ->
-            when (token) {
-                is InlineToken.Code -> {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = IdeSurfaceBrightDark,
-                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-                    ) {
-                        Text(
-                            text = token.code,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFFE2E8F0),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-                is InlineToken.Text -> {
-                    if (token.text.isNotEmpty()) {
-                        Text(
-                            text = token.text,
-                            style = style,
-                            color = color
-                        )
-                    }
-                }
-                is InlineToken.Bold -> {
-                    Text(
-                        text = token.text,
-                        style = style.copy(fontWeight = FontWeight.SemiBold),
-                        color = color
-                    )
-                }
-                is InlineToken.Italic -> {
-                    Text(
-                        text = token.text,
-                        style = style.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
-                        color = color
-                    )
-                }
-                is InlineToken.BoldItalic -> {
-                    Text(
-                        text = token.text,
-                        style = style.copy(fontWeight = FontWeight.Bold, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
-                        color = color
-                    )
-                }
-                is InlineToken.Link -> {
-                    Text(
-                        text = token.label,
-                        style = style.copy(color = IdeAccent),
-                        modifier = Modifier.clip(RoundedCornerShape(4.dp))
-                    )
+    // One flowing Text: code spans are inline placeholders (rounded pills) so wrapping stays natural
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val codeStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val annotated = remember(tokens, style) {
+        androidx.compose.ui.text.buildAnnotatedString {
+            tokens.forEachIndexed { i, token ->
+                when (token) {
+                    is InlineToken.Code -> appendInlineContent("code$i", token.code)
+                    is InlineToken.Text -> append(token.text)
+                    is InlineToken.Bold -> withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold)) { append(token.text) }
+                    is InlineToken.Italic -> withStyle(androidx.compose.ui.text.SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) { append(token.text) }
+                    is InlineToken.BoldItalic -> withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) { append(token.text) }
+                    is InlineToken.Link -> withStyle(androidx.compose.ui.text.SpanStyle(color = IdeAccent)) { append(token.label) }
                 }
             }
         }
     }
+    val inline = remember(tokens, style) {
+        tokens.mapIndexedNotNull { i, token ->
+            if (token !is InlineToken.Code) return@mapIndexedNotNull null
+            val w = measurer.measure(token.code, codeStyle, softWrap = false).size.width
+            val pillW = with(density) { (w.toDp() + 14.dp).toSp() } // 6dp padding each side + border
+            val pillH = with(density) { (measurer.measure(token.code, codeStyle).size.height.toDp() + 4.dp).toSp() }
+            "code$i" to androidx.compose.foundation.text.InlineTextContent(
+                androidx.compose.ui.text.Placeholder(pillW, pillH, androidx.compose.ui.text.PlaceholderVerticalAlign.TextCenter)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = IdeSurfaceBrightDark,
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                ) {
+                    Text(
+                        text = token.code,
+                        style = codeStyle,
+                        color = Color(0xFFE2E8F0),
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }.toMap()
+    }
+    Text(text = annotated, inlineContent = inline, style = style, color = color, modifier = modifier)
 }
+
+/** Natural single-line width in px of inline markdown, counting code pills' padding. */
+private fun measureInlineWidth(
+    text: String,
+    style: androidx.compose.ui.text.TextStyle,
+    measurer: androidx.compose.ui.text.TextMeasurer,
+    padPx: Float
+): Float = tokenizeInlineMarkdown(text).sumOf { t ->
+    val (str, st, extra) = when (t) {
+        is InlineToken.Code -> Triple(t.code, style.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp), padPx)
+        is InlineToken.Text -> Triple(t.text, style, 0f)
+        is InlineToken.Bold -> Triple(t.text, style.copy(fontWeight = FontWeight.SemiBold), 0f)
+        is InlineToken.Italic -> Triple(t.text, style, 0f)
+        is InlineToken.BoldItalic -> Triple(t.text, style.copy(fontWeight = FontWeight.Bold), 0f)
+        is InlineToken.Link -> Triple(t.label, style, 0f)
+    }
+    (measurer.measure(str, st, softWrap = false).size.width + extra).toDouble()
+}.toFloat()
 
 @Composable
 private fun MarkdownTable(
     headers: List<String>,
     rows: List<List<String>>
 ) {
-    // Dynamically calculate the minimum column widths so the cell can comfortably contain its largest element
-    val columnWidths = remember(headers, rows) {
-        headers.indices.map { colIdx ->
-            val maxLen = maxOf(
-                cleanInlineMarkdown(headers.getOrElse(colIdx) { "" }).length,
-                rows.maxOfOrNull { cleanInlineMarkdown(it.getOrElse(colIdx) { "" }).length } ?: 0
+    // Column width = widest measured cell (header or body) + cell padding; very long cells wrap at the cap
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val headerStyle = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+    val bodyStyle = MaterialTheme.typography.bodySmall
+    val columnWidths = remember(headers, rows, headerStyle, bodyStyle) {
+        val pad = with(density) { 14.dp.toPx() }
+        headers.indices.map { c ->
+            val widest = maxOf(
+                measureInlineWidth(headers.getOrElse(c) { "" }, headerStyle, measurer, pad),
+                rows.maxOfOrNull { measureInlineWidth(it.getOrElse(c) { "" }, bodyStyle, measurer, pad) } ?: 0f
             )
-            // Allocate roughly 9.5dp per character with padding, clamped between 110dp and 340dp
-            (maxLen * 9.5f + 24f).coerceIn(110f, 340f).dp
+            with(density) { (widest.toDp() + 24.dp).coerceIn(72.dp, 420.dp) }
         }
     }
 
@@ -1214,12 +1253,7 @@ private fun FloatingModelEffortDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .animateContentSize(
-                    animationSpec = spring(
-                        dampingRatio = 0.82f,
-                        stiffness = 380f
-                    )
-                ),
+                ,
             shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surfaceContainer,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
@@ -1300,26 +1334,14 @@ private fun FloatingModelEffortDialog(
                 }
 
                 // Expandable Clean Base Model List with buttery smooth spring animation
-                AnimatedVisibility(
-                    visible = showModelList,
-                    enter = expandVertically(
-                        animationSpec = spring(
-                            dampingRatio = 0.85f,
-                            stiffness = 380f
-                        )
-                    ) + fadeIn(animationSpec = tween(180, easing = FastOutSlowInEasing)),
-                    exit = shrinkVertically(
-                        animationSpec = spring(
-                            dampingRatio = 0.9f,
-                            stiffness = 450f
-                        )
-                    ) + fadeOut(animationSpec = tween(140, easing = FastOutSlowInEasing))
-                ) {
+                if (showModelList) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(max = 320.dp)
                             .clip(RoundedCornerShape(14.dp))
                             .background(MaterialTheme.colorScheme.surface)
+                            .verticalScroll(rememberScrollState())
                             .padding(6.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {

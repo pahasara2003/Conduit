@@ -1,3 +1,4 @@
+mod files;
 mod sessions;
 mod sys;
 
@@ -30,10 +31,22 @@ fn opt(v: &Value, k: &str) -> Option<String> {
     v[k].as_str().map(String::from)
 }
 
-// Same rule as the Python daemon: enforce X-Token only when CLIPSYNC_TOKEN is set.
+// Every route except /ping needs the shared secret (header `X-Token` or `?token=` for browser downloads).
+// Fails closed: with no CLIPSYNC_TOKEN configured the daemon serves nothing but /ping.
 async fn auth(req: Request, next: Next) -> Response {
+    if req.uri().path() == "/ping" {
+        return next.run(req).await;
+    }
     let token = std::env::var("CLIPSYNC_TOKEN").unwrap_or_default();
-    if !token.is_empty() && req.headers().get("x-token").and_then(|v| v.to_str().ok()) != Some(token.as_str()) {
+    if token.is_empty() {
+        return err(StatusCode::FORBIDDEN, "CLIPSYNC_TOKEN is not set on the PC");
+    }
+    let from_header = req.headers().get("x-token").and_then(|v| v.to_str().ok()).map(String::from);
+    let from_query = req.uri().query().and_then(|q| q.split('&').find_map(|kv| kv.strip_prefix("token=")).map(String::from));
+    let given = from_header.or(from_query).unwrap_or_default();
+    // constant-time compare so the token can't be guessed byte by byte
+    let ok = given.len() == token.len() && given.bytes().zip(token.bytes()).fold(0u8, |a, (x, y)| a | (x ^ y)) == 0;
+    if !ok {
         return err(StatusCode::FORBIDDEN, "Invalid X-Token");
     }
     next.run(req).await
@@ -52,7 +65,7 @@ async fn session_new(body: String) -> Response {
 
 async fn session_get(Path(id): Path<String>) -> Response {
     match sessions::get(&id) {
-        Some(s) => Json(json!({"status": "ok", "session": s})).into_response(),
+        Some(s) => Json(json!({"status": "ok", "session": files::session_json(&s)})).into_response(),
         None => err(StatusCode::NOT_FOUND, "session not found"),
     }
 }
@@ -62,7 +75,7 @@ async fn set_status(id: &str, status: &str) -> Response {
     match sessions::set_status(id, status) {
         None => err(StatusCode::NOT_FOUND, "session not found"),
         Some(s) if status == "closed" => Json(json!({"status": "ok", "session": s.summary()})).into_response(),
-        Some(s) => Json(json!({"status": "ok", "session": s})).into_response(),
+        Some(s) => Json(json!({"status": "ok", "session": files::session_json(&s)})).into_response(),
     }
 }
 
@@ -98,6 +111,33 @@ async fn session_prompt(body: String) -> Response {
     }
 }
 use tokio_stream::StreamExt;
+
+// ---------- files ----------
+type Q = axum::extract::Query<std::collections::HashMap<String, String>>;
+
+fn attachment(name: &str, mime: &'static str, bytes: Vec<u8>) -> Response {
+    ([(header::CONTENT_TYPE, mime.to_string()),
+      (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", name.replace('"', "")))], bytes).into_response()
+}
+
+async fn file_download(q: Q) -> Response {
+    let Some(p) = q.get("path").and_then(|p| files::allowed(std::path::Path::new(p))) else { return err(StatusCode::NOT_FOUND, "file not available") };
+    let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+    match std::fs::read(&p) {
+        Ok(b) => attachment(&name, files::mime(&name), b),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+/// `paths` = newline-separated list.
+async fn file_zip(q: Q) -> Response {
+    let paths: Vec<_> = q.get("paths").map(|s| s.lines().filter_map(|l| files::allowed(std::path::Path::new(l))).collect()).unwrap_or_default();
+    if paths.is_empty() { return err(StatusCode::NOT_FOUND, "no files available"); }
+    match files::zip(&paths).await {
+        Some(b) => attachment("conduit-files.zip", "application/zip", b),
+        None => err(StatusCode::INTERNAL_SERVER_ERROR, "zip failed (is `zip` installed?)"),
+    }
+}
 
 // ---------- system ----------
 async fn stats() -> Json<Value> { Json(sys::system_stats().await) }
@@ -235,12 +275,14 @@ async fn main() {
         .route("/api/ai/sessions/:id/close", post(session_close))
         .route("/api/ai/sessions/:id/resume", post(session_resume))
         .route("/api/ai/sessions/:id/delete", post(session_delete))
+        .route("/api/files/download", get(file_download))
+        .route("/api/files/zip", get(file_zip))
         .route("/api/system/stats", get(stats))
         .route("/api/system/screenshot", get(screenshot))
         .route("/api/terminal/run", post(terminal));
     api = api.route("/api/sessions", get(sessions_list)).route("/api/ai/sessions", get(sessions_list).post(session_new));
 
-    let app = api.layer(middleware::from_fn(auth))
+    let app = api
         .route("/ping", get(|| async { "conduit-pc" }))
         .route("/clip", get(clip_get).post(clip_post))
         .route("/register", post(register))
@@ -248,7 +290,8 @@ async fn main() {
         .route("/download/apk", get(download_apk))
         .route("/ssh/info", get(ssh_info))
         .route("/ssh/authorize", post(ssh_authorize))
-        .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024));
+        .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
+        .layer(middleware::from_fn(auth));
 
     let port: u16 = std::env::var("CLIPSYNC_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(PC_PORT);
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await.expect("bind :8765 (is the Python daemon still running?)");

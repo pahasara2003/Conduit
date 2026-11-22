@@ -328,7 +328,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             WorkspaceItem.AssistantResponse(
                                 id = nextId(),
                                 timestamp = msg.timestamp.ifBlank { now() },
-                                text = msg.text
+                                text = msg.text,
+                                files = msg.files
                             )
                         }
                     }
@@ -355,6 +356,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             )
             setWorking(false)
+        }
+    }
+
+    fun downloadFiles(files: List<AiFile>) {
+        viewModelScope.launch {
+            ConduitRepository.downloadFiles(files).fold(
+                onSuccess = { (uri, mime) ->
+                    Toast.makeText(getApplication(), "Saved to Downloads", Toast.LENGTH_SHORT).show()
+                    try {
+                        getApplication<Application>().startActivity(
+                            android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, mime)
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        )
+                    } catch (_: Exception) { /* no app for this type; file is still saved */ }
+                },
+                onFailure = { Toast.makeText(getApplication(), "Download failed: ${it.message}", Toast.LENGTH_LONG).show() }
+            )
         }
     }
 
@@ -414,7 +432,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         WorkspaceItem.AssistantResponse(
                             id = nextId(),
                             timestamp = now(),
-                            text = res.reply.ifBlank { "(Empty response from model)" }
+                            text = res.reply.ifBlank { "(Empty response from model)" },
+                            files = res.files
                         )
                     )
                     res.session?.let { updatedSess ->
@@ -590,10 +609,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updatePcHost(host: String) {
         ConduitRepository.setPcHost(getApplication(), host)
         refreshConnectionAndBranch()
-    }
-
-    fun updateApiToken(token: String) {
-        ConduitRepository.setApiToken(getApplication(), token)
     }
 
     fun discoverPc() {

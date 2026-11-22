@@ -139,6 +139,7 @@ class ConduitService : Service() {
             val path = parts[1]
 
             var contentLength = 0
+            var givenToken = ""
             for (line in lines.drop(1)) {
                 val idx = line.indexOf(':')
                 if (idx > 0) {
@@ -147,11 +148,23 @@ class ConduitService : Service() {
                     if (key == "content-length") {
                         contentLength = value.toIntOrNull() ?: 0
                     }
+                    if (key == "x-token") {
+                        givenToken = value
+                    }
                 }
             }
 
             if (method == "GET" && path == "/ping") {
                 writeResponse(output, 200, "conduit-phone")
+                return
+            }
+
+            // Everything except /ping needs the shared secret; no secret built in means nothing is accepted
+            val expected = BuildConfig.PC_TOKEN
+            if (expected.isEmpty() || !java.security.MessageDigest.isEqual(
+                    givenToken.toByteArray(Charsets.UTF_8), expected.toByteArray(Charsets.UTF_8))
+            ) {
+                writeResponse(output, 403, "Forbidden")
                 return
             }
 

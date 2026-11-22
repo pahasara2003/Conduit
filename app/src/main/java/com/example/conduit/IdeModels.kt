@@ -33,7 +33,8 @@ sealed class WorkspaceItem {
     data class AssistantResponse(
         override val id: String,
         override val timestamp: String,
-        val text: String
+        val text: String,
+        val files: List<AiFile> = emptyList()
     ) : WorkspaceItem()
 
     data class ToolExecution(

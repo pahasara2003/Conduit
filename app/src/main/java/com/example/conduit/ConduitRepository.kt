@@ -8,6 +8,8 @@ import android.graphics.BitmapFactory
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,7 +42,6 @@ data class ClipEntry(
 
 data class ConduitState(
     val pcHost: String = ConduitRepository.DEFAULT_TAILSCALE_HOST,
-    val apiToken: String = "",
     val phoneIp: String = "Unknown",
     val isServiceRunning: Boolean = false,
     val isPcOnline: Boolean = false,
@@ -97,10 +98,13 @@ data class BaseModelGroup(
     val availableEfforts: List<ReasoningEffort> = ReasoningEffort.entries
 )
 
+data class AiFile(val path: String, val name: String, val size: Long)
+
 data class AiSessionMessage(
     val role: String,
     val text: String,
-    val timestamp: String
+    val timestamp: String,
+    val files: List<AiFile> = emptyList()
 )
 
 data class AiSessionSummary(
@@ -125,8 +129,11 @@ data class AiPromptResult(
     val modelLabel: String,
     val sessionId: String,
     val conversationId: String,
-    val session: AiSessionSummary?
+    val session: AiSessionSummary?,
+    val files: List<AiFile> = emptyList()
 )
+
+data class RouteStatus(val label: String, val host: String, val reachable: Boolean, val latencyMs: Long)
 
 object ConduitRepository {
     const val DEFAULT_TAILSCALE_HOST = "100.110.163.70"
@@ -135,7 +142,7 @@ object ConduitRepository {
     const val DISCOVERY_PORT = 8767
     private const val PREFS_NAME = "conduit_prefs"
     private const val KEY_PC_HOST = "pc_host"
-    private const val KEY_API_TOKEN = "api_token"
+    private const val KEY_ROUTE_MODE = "route_mode"
     private const val KEY_AI_MODEL = "ai_model"
     const val DEFAULT_AI_MODEL = "gemini-3.8-flash-low"
 
@@ -154,12 +161,10 @@ object ConduitRepository {
         val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val savedHost = prefs.getString(KEY_PC_HOST, null)?.takeIf { it.isNotBlank() }
             ?: DEFAULT_TAILSCALE_HOST
-        val savedToken = prefs.getString(KEY_API_TOKEN, "") ?: ""
         val localIp = getLocalWifiIp() ?: "No Wi-Fi"
         _state.update {
             it.copy(
                 pcHost = savedHost,
-                apiToken = savedToken,
                 phoneIp = localIp,
                 connectionLabel = transportLabelForHost(savedHost)
             )
@@ -179,16 +184,6 @@ object ConduitRepository {
                 connectionLabel = transportLabelForHost(trimmed)
             )
         }
-    }
-
-    fun setApiToken(context: Context, token: String) {
-        val trimmed = token.trim()
-        context.applicationContext
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_API_TOKEN, trimmed)
-            .apply()
-        _state.update { it.copy(apiToken = trimmed) }
     }
 
     fun setActiveBranch(branch: String) {
@@ -217,6 +212,19 @@ object ConduitRepository {
                 isPcOnline = online,
                 connectionLabel = label ?: it.connectionLabel
             )
+        }
+    }
+
+    /** Pings every route in the order requests try them; the first reachable one is what gets used. */
+    suspend fun probeRoutes(): List<RouteStatus> = withContext(Dispatchers.IO) {
+        kotlinx.coroutines.coroutineScope {
+            allPcTargets(appContext).map { (host, label) ->
+                async {
+                    val t0 = System.currentTimeMillis()
+                    val ok = getText("http://$host:$PC_PORT/ping", connectTimeoutMs = 2000, readTimeoutMs = 2000).isSuccess
+                    RouteStatus(label, host, ok, System.currentTimeMillis() - t0)
+                }
+            }.awaitAll()
         }
     }
 
@@ -478,7 +486,8 @@ object ConduitRepository {
                                                 modelLabel = j.optString("model_label", model ?: DEFAULT_AI_MODEL),
                                                 sessionId = j.optString("session_id", sessionId ?: ""),
                                                 conversationId = j.optString("conversation_id", conversationId ?: ""),
-                                                session = sessObj?.let { parseSessionSummary(it) }
+                                                session = sessObj?.let { parseSessionSummary(it) },
+                                                files = parseFiles(j.optJSONArray("files"))
                                             )
                                         }
                                     }
@@ -542,7 +551,8 @@ object ConduitRepository {
                         modelLabel = j.optString("model_label", model ?: DEFAULT_AI_MODEL),
                         sessionId = j.optString("session_id", sessionId ?: ""),
                         conversationId = j.optString("conversation_id", conversationId ?: ""),
-                        session = sessObj?.let { parseSessionSummary(it) }
+                        session = sessObj?.let { parseSessionSummary(it) },
+                        files = parseFiles(j.optJSONArray("files"))
                     )
                 }
             } else {
@@ -572,6 +582,49 @@ object ConduitRepository {
         )
     }
 
+    private fun parseFiles(arr: org.json.JSONArray?): List<AiFile> = buildList {
+        if (arr == null) return@buildList
+        for (i in 0 until arr.length()) {
+            val f = arr.getJSONObject(i)
+            add(AiFile(f.getString("path"), f.optString("name", "file"), f.optLong("size", 0)))
+        }
+    }
+
+    /** Downloads one file (or a zip of several) from the PC into the phone's Downloads folder. */
+    suspend fun downloadFiles(files: List<AiFile>): Result<Pair<android.net.Uri, String>> = withContext(Dispatchers.IO) {
+        val ctx = appContext ?: return@withContext Result.failure(IllegalStateException("not initialised"))
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+            return@withContext Result.failure(IllegalStateException("Saving files needs Android 10+"))
+        }
+        val enc = { v: String -> java.net.URLEncoder.encode(v, "UTF-8") }
+        val (query, name, mime) = if (files.size == 1) {
+            Triple("download?path=${enc(files[0].path)}", files[0].name, mimeFor(files[0].name))
+        } else {
+            Triple("zip?paths=${enc(files.joinToString("\n") { it.path })}", "conduit-files.zip", "application/zip")
+        }
+        var lastError: Throwable = IllegalStateException("PC unreachable")
+        for ((host, label) in buildPcTargets(ctx)) {
+            val res = getBytes("http://$host:$PC_PORT/api/files/$query", readTimeoutMs = 120_000, includeToken = true)
+            if (res.isFailure) { lastError = res.exceptionOrNull() ?: lastError; continue }
+            markConnection(true, label)
+            return@withContext runCatching {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+                    put(android.provider.MediaStore.Downloads.MIME_TYPE, mime)
+                }
+                val uri = ctx.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: error("Could not create file in Downloads")
+                ctx.contentResolver.openOutputStream(uri)!!.use { it.write(res.getOrThrow()) }
+                uri to mime
+            }
+        }
+        Result.failure(lastError)
+    }
+
+    private fun mimeFor(name: String): String =
+        android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase())
+            ?: "application/octet-stream"
+
     private fun parseSessionDetail(j: JSONObject): AiSessionDetail {
         val summary = parseSessionSummary(j)
         val arr = j.optJSONArray("messages")
@@ -583,7 +636,8 @@ object ConduitRepository {
                         AiSessionMessage(
                             role = m.optString("role", "assistant"),
                             text = m.optString("text", ""),
-                            timestamp = m.optString("timestamp", "")
+                            timestamp = m.optString("timestamp", ""),
+                            files = parseFiles(m.optJSONArray("files"))
                         )
                     )
                 }
@@ -708,6 +762,11 @@ object ConduitRepository {
     }
 
     suspend fun discoverPc(context: Context): String? = withContext(Dispatchers.IO) {
+        // Discovery is a Wi-Fi broadcast and rewrites the saved host: never do that in a manual Tailscale/USB mode
+        if (getRouteMode() == "Tailscale" || getRouteMode() == "USB/ADB") {
+            _state.update { it.copy(statusMessage = "Manual ${getRouteMode()} mode: discovery skipped") }
+            return@withContext null
+        }
         refreshPhoneIp()
         var foundIp: String? = null
         try {
@@ -746,7 +805,12 @@ object ConduitRepository {
     }
 
     suspend fun registerPhoneWithPc(context: Context) = withContext(Dispatchers.IO) {
-        val phoneIp = getLocalWifiIp() ?: return@withContext
+        // The PC pushes clipboard back to this address, so it must belong to the chosen network
+        val phoneIp = when (getRouteMode()) {
+            "USB/ADB" -> return@withContext // PC reaches the phone through adb forward
+            "Tailscale" -> getLocalTailscaleIp()
+            else -> getLocalWifiIp()
+        } ?: return@withContext
         val payload = """{"ip":"$phoneIp","port":$PHONE_PORT}"""
         val targets = buildPcTargets(context)
         for ((host, _) in targets) {
@@ -842,7 +906,23 @@ object ConduitRepository {
         }
     }
 
+    /** "Auto" tries every route in order; otherwise only the chosen transport label is used. */
+    val routeModes = listOf("Auto", "Wi-Fi", "Tailscale", "USB/ADB")
+
+    fun getRouteMode(): String =
+        appContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.getString(KEY_ROUTE_MODE, "Auto") ?: "Auto"
+
+    fun setRouteMode(mode: String) {
+        appContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.edit()?.putString(KEY_ROUTE_MODE, mode)?.apply()
+    }
+
     private fun buildPcTargets(context: Context?): List<Pair<String, String>> {
+        val mode = getRouteMode()
+        val all = allPcTargets(context)
+        return if (mode == "Auto") all else all.filter { it.second == mode }
+    }
+
+    private fun allPcTargets(context: Context?): List<Pair<String, String>> {
         val saved = _state.value.pcHost.ifBlank {
             context?.applicationContext
                 ?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -866,13 +946,7 @@ object ConduitRepository {
         return list
     }
 
-    private fun currentApiToken(): String {
-        val inMem = _state.value.apiToken
-        if (inMem.isNotBlank()) return inMem
-        return appContext
-            ?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            ?.getString(KEY_API_TOKEN, "") ?: ""
-    }
+    private fun currentApiToken(): String = BuildConfig.PC_TOKEN
 
     private fun parseHttpError(conn: HttpURLConnection, code: Int): ApiHttpException {
         val errBody = try {
@@ -901,6 +975,7 @@ object ConduitRepository {
                 readTimeout = 2500
                 doOutput = true
                 setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+                currentApiToken().takeIf { it.isNotBlank() }?.let { setRequestProperty("X-Token", it) }
             }
             OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
                 writer.write(body)
@@ -923,7 +998,7 @@ object ConduitRepository {
         jsonBody: String,
         connectTimeoutMs: Int = 2500,
         readTimeoutMs: Int = 30_000,
-        includeToken: Boolean = false
+        includeToken: Boolean = true
     ): Result<String> {
         return try {
             val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
@@ -998,7 +1073,7 @@ object ConduitRepository {
         urlStr: String,
         connectTimeoutMs: Int = 1500,
         readTimeoutMs: Int = 2500,
-        includeToken: Boolean = false
+        includeToken: Boolean = true
     ): Result<String> {
         return try {
             val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
@@ -1031,7 +1106,7 @@ object ConduitRepository {
         urlStr: String,
         connectTimeoutMs: Int = 2500,
         readTimeoutMs: Int = 15_000,
-        includeToken: Boolean = false
+        includeToken: Boolean = true
     ): Result<ByteArray> {
         return try {
             val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
@@ -1084,6 +1159,15 @@ object ConduitRepository {
         }
         Result.failure(last)
     }
+
+    /** This phone's Tailscale address (CGNAT range 100.64.0.0/10), if the VPN is up. */
+    fun getLocalTailscaleIp(): String? = try {
+        NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp }
+            .flatMap { it.inetAddresses.toList() }
+            .filterIsInstance<Inet4Address>()
+            .map { it.hostAddress ?: "" }
+            .firstOrNull { ip -> ip.split(".").let { it.size == 4 && it[0] == "100" && it[1].toIntOrNull() in 64..127 } }
+    } catch (_: Exception) { null }
 
     fun getLocalWifiIp(): String? {
         return try {

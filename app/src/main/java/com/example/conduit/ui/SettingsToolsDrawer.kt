@@ -78,6 +78,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import com.example.conduit.AiSessionSummary
 import com.example.conduit.ConduitRepository
+import com.example.conduit.RouteStatus
 import com.example.conduit.ConduitState
 import com.example.conduit.SshInfo
 import com.example.conduit.ui.theme.IdeTextMutedDark
@@ -98,19 +99,21 @@ fun SettingsToolsDrawer(
     onPullClipboard: () -> Unit,
     onToggleService: (Boolean) -> Unit,
     onUpdatePcHost: (String) -> Unit,
-    onUpdateApiToken: (String) -> Unit,
     onDiscoverPc: () -> Unit,
     onCopyHistory: (String) -> Unit,
     onResendHistory: (String) -> Unit
 ) {
     val context = LocalContext.current
     var pcIpInput by remember(state.pcHost) { mutableStateOf(state.pcHost) }
-    var tokenInput by remember(state.apiToken) { mutableStateOf(state.apiToken) }
-    var showToken by remember { mutableStateOf(false) }
 
     var expandClipboard by remember { mutableStateOf(false) }
     var expandSsh by remember { mutableStateOf(false) }
     var expandConnection by remember { mutableStateOf(false) }
+    var routes by remember { mutableStateOf<List<RouteStatus>?>(null) }
+    var probeTick by remember { mutableStateOf(0) }
+    LaunchedEffect(expandConnection, probeTick) {
+        if (expandConnection) { routes = null; routes = ConduitRepository.probeRoutes() }
+    }
 
     val isNotificationListenerEnabled = remember(state.isServiceRunning) {
         NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
@@ -261,6 +264,17 @@ fun SettingsToolsDrawer(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
+                                    IconButton(
+                                        onClick = { onDeleteSession(session.id) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.DeleteOutline,
+                                            contentDescription = "Delete chat",
+                                            tint = IdeTextMutedDark,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -379,6 +393,47 @@ fun SettingsToolsDrawer(
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val active = routes?.firstOrNull { it.reachable }
+                        Text(
+                            text = when {
+                                routes == null -> "Checking routes…"
+                                active != null -> "Using: ${active.label} (${active.host}) · ${active.latencyMs} ms" + if (ConduitRepository.getRouteMode() == "Auto") "" else " · manual"
+                                else -> "PC unreachable on all routes"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (routes != null && active == null) StatusError else MaterialTheme.colorScheme.onSurface
+                        )
+                        routes?.forEach { r ->
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Box(Modifier.size(7.dp).clip(CircleShape).background(if (r.reachable) StatusOnline else StatusError))
+                                Text(
+                                    text = "${r.label} · ${r.host} — " + if (r.reachable) "${r.latencyMs} ms" else "unreachable",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Phone Wi-Fi: ${state.phoneIp}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        var mode by remember { mutableStateOf(ConduitRepository.getRouteMode()) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ConduitRepository.routeModes.forEach { m ->
+                                androidx.compose.material3.FilterChip(
+                                    selected = mode == m,
+                                    onClick = { mode = m; ConduitRepository.setRouteMode(m); probeTick++ },
+                                    label = { Text(m, style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+                        if (mode != "Auto" && routes?.none { it.label == mode } == true) {
+                            Text("No $mode address is configured for this mode.", style = MaterialTheme.typography.bodySmall, color = StatusError)
+                        }
+                        OutlinedButton(onClick = { probeTick++ }) { Text("Test connection") }
+
                         OutlinedTextField(
                             value = pcIpInput,
                             onValueChange = { pcIpInput = it },
@@ -405,42 +460,6 @@ fun SettingsToolsDrawer(
                                     }
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        OutlinedTextField(
-                            value = tokenInput,
-                            onValueChange = { tokenInput = it },
-                            label = { Text("API Token (optional)") },
-                            singleLine = true,
-                            visualTransformation = if (showToken) {
-                                VisualTransformation.None
-                            } else {
-                                PasswordVisualTransformation()
-                            },
-                            trailingIcon = {
-                                Row {
-                                    if (tokenInput != state.apiToken) {
-                                        IconButton(onClick = {
-                                            onUpdateApiToken(tokenInput)
-                                            Toast.makeText(context, "Token saved", Toast.LENGTH_SHORT).show()
-                                        }) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Check,
-                                                contentDescription = "Save token",
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    }
-                                    IconButton(onClick = { showToken = !showToken }) {
-                                        Icon(
-                                            imageVector = if (showToken) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                            contentDescription = "Toggle visibility"
-                                        )
-                                    }
-                                }
-                            },
-                            shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         )
 

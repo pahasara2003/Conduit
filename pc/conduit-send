@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /home/pahasara/AndroidProjects/ClipSync/pc/clipsync_pc.py --send "$@"
+exec "$(dirname "$0")/conduit_pc.py" --send "$@"

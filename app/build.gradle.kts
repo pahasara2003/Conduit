@@ -15,6 +15,12 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Shared secret with the PC daemon, read at build time so it is never typed on the phone
+        val tokenFile = File(System.getProperty("user.home"), ".config/conduit/token.env")
+        val pcToken = tokenFile.takeIf { it.exists() }?.readLines()
+            ?.firstOrNull { it.startsWith("CLIPSYNC_TOKEN=") }?.substringAfter("=")?.trim() ?: ""
+        buildConfigField("String", "PC_TOKEN", "\"$pcToken\"")
     }
 
     buildTypes {
@@ -32,6 +38,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

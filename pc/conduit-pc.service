@@ -3,6 +3,7 @@ Description=Conduit PC Clipboard Server
 After=graphical-session.target
 
 [Service]
+EnvironmentFile=%h/.config/conduit/token.env
 ExecStart=/home/pahasara/AndroidProjects/Conduit/pc/conduit-daemon/target/release/conduit-daemon
 Restart=on-failure
 RestartSec=3
