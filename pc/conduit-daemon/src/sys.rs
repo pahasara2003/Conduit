@@ -81,7 +81,7 @@ pub async fn system_stats() -> Value {
 }
 
 pub async fn screenshot() -> Option<Vec<u8>> {
-    let path = std::env::temp_dir().join(format!("clipsync-shot-{}.png", std::process::id()));
+    let path = std::env::temp_dir().join(format!("conduit-shot-{}.png", std::process::id()));
     let p = path.to_string_lossy().to_string();
     let mut result = None;
     for (tool, args) in [("grim", vec![p.as_str()]), ("scrot", vec!["-o", p.as_str()]), ("import", vec!["-window", "root", p.as_str()])] {
@@ -126,9 +126,9 @@ pub async fn set_clipboard(text: &str) {
 
 pub fn notify(title: String, body: String, image: Option<Vec<u8>>) {
     tokio::spawn(async move {
-        let mut args: Vec<String> = vec!["-a".into(), "ClipSync".into()];
+        let mut args: Vec<String> = vec!["-a".into(), "Conduit".into()];
         if let Some(img) = image {
-            let dir = home().join(".cache/clipsync/avatars");
+            let dir = home().join(".cache/conduit/avatars");
             let _ = std::fs::create_dir_all(&dir);
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();

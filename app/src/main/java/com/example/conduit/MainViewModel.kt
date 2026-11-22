@@ -1,4 +1,4 @@
-package com.example.clipsync
+package com.example.conduit
 
 import android.app.Application
 import android.widget.Toast
@@ -124,17 +124,17 @@ data class IdeWorkspaceState(
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    val uiState: StateFlow<ClipSyncState> = ClipSyncRepository.state
+    val uiState: StateFlow<ConduitState> = ConduitRepository.state
 
     private val _workspaceState = MutableStateFlow(IdeWorkspaceState())
     val workspaceState: StateFlow<IdeWorkspaceState> = _workspaceState.asStateFlow()
 
     private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-    private val projectDir = "~/AndroidProjects/ClipSync"
+    private val projectDir = "~/AndroidProjects/Conduit"
 
     init {
-        ClipSyncRepository.init(application)
-        val savedModelId = ClipSyncRepository.getSavedAiModel(application)
+        ConduitRepository.init(application)
+        val savedModelId = ConduitRepository.getSavedAiModel(application)
         val (baseId, effort) = IdeWorkspaceState.splitModelId(savedModelId)
         val baseGroup = IdeWorkspaceState.DEFAULT_BASE_MODELS.find { it.baseId == baseId }
             ?: BaseModelGroup(baseId, baseId)
@@ -154,17 +154,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshConnectionAndBranch() {
         viewModelScope.launch {
-            val ping = ClipSyncRepository.pingPc()
+            val ping = ConduitRepository.pingPc()
             if (ping.isSuccess) {
                 launch { refreshModels() }
                 launch { refreshSessions() }
-                val branchRes = ClipSyncRepository.runTerminalCommand(
+                val branchRes = ConduitRepository.runTerminalCommand(
                     cmd = "git -C $projectDir rev-parse --abbrev-ref HEAD",
                     timeoutSec = 8
                 )
                 branchRes.getOrNull()?.let { result ->
                     if (result.exitCode == 0 && result.stdout.isNotBlank()) {
-                        ClipSyncRepository.setActiveBranch(result.stdout.trim())
+                        ConduitRepository.setActiveBranch(result.stdout.trim())
                     }
                 }
             }
@@ -173,7 +173,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshModels() {
         viewModelScope.launch {
-            val res = ClipSyncRepository.fetchAiModels()
+            val res = ConduitRepository.fetchAiModels()
             res.getOrNull()?.takeIf { it.isNotEmpty() }?.let { list ->
                 _workspaceState.update { cur ->
                     val baseGroups = IdeWorkspaceState.buildBaseModels(list)
@@ -193,7 +193,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshSessions() {
         viewModelScope.launch {
-            val res = ClipSyncRepository.fetchAiSessions()
+            val res = ConduitRepository.fetchAiSessions()
             res.getOrNull()?.let { list ->
                 _workspaceState.update { cur ->
                     val updatedActive = cur.activeSession?.let { act ->
@@ -208,7 +208,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectBaseModel(baseModel: BaseModelGroup) {
         val cur = _workspaceState.value
         val composed = IdeWorkspaceState.composeModel(baseModel, cur.selectedEffort, cur.models)
-        ClipSyncRepository.setSavedAiModel(getApplication(), composed.id)
+        ConduitRepository.setSavedAiModel(getApplication(), composed.id)
         _workspaceState.update {
             it.copy(
                 selectedBaseModel = baseModel,
@@ -220,7 +220,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectEffort(effort: ReasoningEffort) {
         val cur = _workspaceState.value
         val composed = IdeWorkspaceState.composeModel(cur.selectedBaseModel, effort, cur.models)
-        ClipSyncRepository.setSavedAiModel(getApplication(), composed.id)
+        ConduitRepository.setSavedAiModel(getApplication(), composed.id)
         _workspaceState.update {
             it.copy(
                 selectedEffort = effort,
@@ -234,7 +234,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val cur = _workspaceState.value
         val baseGroup = cur.baseModels.find { it.baseId == baseId }
             ?: BaseModelGroup(baseId, model.label.substringBefore(" ("))
-        ClipSyncRepository.setSavedAiModel(getApplication(), model.id)
+        ConduitRepository.setSavedAiModel(getApplication(), model.id)
         _workspaceState.update {
             it.copy(
                 selectedBaseModel = baseGroup,
@@ -248,7 +248,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_workspaceState.value.isWorking) return
         selectModel(model)
         viewModelScope.launch {
-            val res = ClipSyncRepository.createAiSession(model.id, model.label)
+            val res = ConduitRepository.createAiSession(model.id, model.label)
             res.fold(
                 onSuccess = { detail ->
                     _workspaceState.update { cur ->
@@ -275,7 +275,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
-            val res = ClipSyncRepository.closeAiSession(active.id)
+            val res = ConduitRepository.closeAiSession(active.id)
             res.fold(
                 onSuccess = { closedSummary ->
                     _workspaceState.update { cur ->
@@ -296,7 +296,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeSessionById(sessionId: String) {
         viewModelScope.launch {
-            val res = ClipSyncRepository.closeAiSession(sessionId)
+            val res = ConduitRepository.closeAiSession(sessionId)
             res.getOrNull()?.let { closedSummary ->
                 _workspaceState.update { cur ->
                     val clearActive = cur.activeSession?.id == sessionId
@@ -314,7 +314,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_workspaceState.value.isWorking) return
         viewModelScope.launch {
             setWorking(true, "Resuming session...")
-            val res = ClipSyncRepository.resumeAiSession(sessionId)
+            val res = ConduitRepository.resumeAiSession(sessionId)
             res.fold(
                 onSuccess = { detail ->
                     val restoredItems = detail.messages.map { msg ->
@@ -337,7 +337,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val baseGroup = _workspaceState.value.baseModels.find { it.baseId == baseId }
                         ?: BaseModelGroup(baseId, detail.summary.modelLabel.substringBefore(" ("))
                     val composed = IdeWorkspaceState.composeModel(baseGroup, effort, curModels)
-                    ClipSyncRepository.setSavedAiModel(getApplication(), composed.id)
+                    ConduitRepository.setSavedAiModel(getApplication(), composed.id)
                     _workspaceState.update { cur ->
                         cur.copy(
                             activeSession = detail.summary,
@@ -360,7 +360,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteSession(sessionId: String) {
         viewModelScope.launch {
-            val res = ClipSyncRepository.deleteAiSession(sessionId)
+            val res = ConduitRepository.deleteAiSession(sessionId)
             res.fold(
                 onSuccess = {
                     _workspaceState.update { cur ->
@@ -398,7 +398,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             setWorking(true, "${cur.selectedBaseModel.displayName} is thinking...")
-            val result = ClipSyncRepository.sendAiPromptInSession(
+            val result = ConduitRepository.sendAiPromptInSession(
                 prompt = trimmed,
                 model = currentModel.id,
                 effort = currentEffort.key,
@@ -469,7 +469,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             setWorking(true, "Running $label...")
-            val result = ClipSyncRepository.runTerminalCommand(command, timeoutSec = timeoutSec)
+            val result = ConduitRepository.runTerminalCommand(command, timeoutSec = timeoutSec)
             result.fold(
                 onSuccess = { term ->
                     replaceItem(cardId) {
@@ -508,7 +508,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_workspaceState.value.isWorking) return
         viewModelScope.launch {
             setWorking(true, "Capturing PC screen...")
-            val result = ClipSyncRepository.fetchScreenshotBitmap()
+            val result = ConduitRepository.fetchScreenshotBitmap()
             result.fold(
                 onSuccess = { bitmap ->
                     appendItem(
@@ -538,7 +538,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_workspaceState.value.isWorking) return
         viewModelScope.launch {
             setWorking(true, "Reading PC system telemetry...")
-            val result = ClipSyncRepository.fetchSystemStats()
+            val result = ConduitRepository.fetchSystemStats()
             result.fold(
                 onSuccess = { stats ->
                     appendItem(
@@ -585,17 +585,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Secondary features: Clipboard Sync & Connection settings
 
     fun updatePcHost(host: String) {
-        ClipSyncRepository.setPcHost(getApplication(), host)
+        ConduitRepository.setPcHost(getApplication(), host)
         refreshConnectionAndBranch()
     }
 
     fun updateApiToken(token: String) {
-        ClipSyncRepository.setApiToken(getApplication(), token)
+        ConduitRepository.setApiToken(getApplication(), token)
     }
 
     fun discoverPc() {
         viewModelScope.launch {
-            val found = ClipSyncRepository.discoverPc(getApplication())
+            val found = ConduitRepository.discoverPc(getApplication())
             val msg = if (found != null) "Found PC at $found" else "Using Tailscale / ADB fallback"
             Toast.makeText(getApplication(), msg, Toast.LENGTH_SHORT).show()
             refreshConnectionAndBranch()
@@ -604,7 +604,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendCurrentClipboard() {
         val ctx = getApplication<Application>()
-        val text = ClipSyncRepository.getPhoneClipboard(ctx)
+        val text = ConduitRepository.getPhoneClipboard(ctx)
         if (text.isNullOrEmpty()) {
             Toast.makeText(ctx, "Phone clipboard is empty", Toast.LENGTH_SHORT).show()
             return
@@ -615,7 +615,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun sendText(text: String) {
         val ctx = getApplication<Application>()
         viewModelScope.launch {
-            val result = ClipSyncRepository.sendToPc(ctx, text)
+            val result = ConduitRepository.sendToPc(ctx, text)
             val msg = result.fold(
                 onSuccess = { transport -> "Sent to PC ($transport) ✓" },
                 onFailure = { err -> "Failed: ${err.message}" }
@@ -627,7 +627,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun pullFromPc() {
         val ctx = getApplication<Application>()
         viewModelScope.launch {
-            val result = ClipSyncRepository.pullFromPc(ctx)
+            val result = ConduitRepository.pullFromPc(ctx)
             val msg = result.fold(
                 onSuccess = { (_, transport) -> "Copied PC clipboard ($transport) ✓" },
                 onFailure = { err -> "Pull failed: ${err.message}" }
@@ -638,16 +638,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun copyToPhone(text: String) {
         val ctx = getApplication<Application>()
-        ClipSyncRepository.setPhoneClipboard(ctx, text)
+        ConduitRepository.setPhoneClipboard(ctx, text)
         Toast.makeText(ctx, "Copied to clipboard", Toast.LENGTH_SHORT).show()
     }
 
     fun toggleService(enable: Boolean) {
         val ctx = getApplication<Application>()
         if (enable) {
-            ClipSyncService.start(ctx)
+            ConduitService.start(ctx)
         } else {
-            ClipSyncService.stop(ctx)
+            ConduitService.stop(ctx)
         }
     }
 }

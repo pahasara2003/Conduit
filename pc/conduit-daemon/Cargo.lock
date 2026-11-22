@@ -137,7 +137,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "clipsync-daemon"
+name = "conduit-daemon"
 version = "0.1.0"
 dependencies = [
  "axum",

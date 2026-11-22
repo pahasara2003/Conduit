@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Headless notification validator for ClipSync.
+"""Headless notification validator for Conduit.
 Verifies syntax, imports, and styling of both daemon and popup widgets WITHOUT emitting live desktop alerts.
 """
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 repo_root = Path(__file__).resolve().parent.parent.parent
 pc_dir = repo_root / "pc"
-pc_script = pc_dir / "clipsync_pc.py"
+pc_script = pc_dir / "conduit_pc.py"
 popup_script = pc_dir / "notify_popup.py"
 
 for script in (pc_script, popup_script):

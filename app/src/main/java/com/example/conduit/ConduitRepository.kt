@@ -1,4 +1,4 @@
-package com.example.clipsync
+package com.example.conduit
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -38,8 +38,8 @@ data class ClipEntry(
     val timestamp: String
 )
 
-data class ClipSyncState(
-    val pcHost: String = ClipSyncRepository.DEFAULT_TAILSCALE_HOST,
+data class ConduitState(
+    val pcHost: String = ConduitRepository.DEFAULT_TAILSCALE_HOST,
     val apiToken: String = "",
     val phoneIp: String = "Unknown",
     val isServiceRunning: Boolean = false,
@@ -128,12 +128,12 @@ data class AiPromptResult(
     val session: AiSessionSummary?
 )
 
-object ClipSyncRepository {
+object ConduitRepository {
     const val DEFAULT_TAILSCALE_HOST = "100.110.163.70"
     const val PC_PORT = 8765
     const val PHONE_PORT = 8766
     const val DISCOVERY_PORT = 8767
-    private const val PREFS_NAME = "clipsync_prefs"
+    private const val PREFS_NAME = "conduit_prefs"
     private const val KEY_PC_HOST = "pc_host"
     private const val KEY_API_TOKEN = "api_token"
     private const val KEY_AI_MODEL = "ai_model"
@@ -142,8 +142,8 @@ object ClipSyncRepository {
     @Volatile
     private var appContext: Context? = null
 
-    private val _state = MutableStateFlow(ClipSyncState())
-    val state: StateFlow<ClipSyncState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(ConduitState())
+    val state: StateFlow<ConduitState> = _state.asStateFlow()
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
@@ -723,7 +723,7 @@ object ClipSyncRepository {
 
     fun setPhoneClipboard(context: Context, text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("ClipSync", text))
+        clipboard.setPrimaryClip(ClipData.newPlainText("Conduit", text))
     }
 
     fun getPhoneClipboard(context: Context): String? {

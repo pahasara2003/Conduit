@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ClipSync"
+rootProject.name = "Conduit"
 include(":app")

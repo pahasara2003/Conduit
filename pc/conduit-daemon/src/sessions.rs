@@ -57,14 +57,14 @@ fn uuid() -> String {
 }
 
 fn default_cwd() -> String {
-    home().join("AndroidProjects/ClipSync").to_string_lossy().into()
+    home().join("AndroidProjects/Conduit").to_string_lossy().into()
 }
 
 // ---------- store ----------
 static STORE: Mutex<()> = Mutex::new(());
 
 fn file() -> std::path::PathBuf {
-    home().join(".config/clipsync/sessions.json")
+    home().join(".config/conduit/sessions.json")
 }
 
 /// Load, mutate, save under one lock.
@@ -234,10 +234,36 @@ async fn turn(w: &mut Warm, prompt: &str, tx: &Option<Sender<Value>>) -> Result<
     w.stdin.flush().await.map_err(|e| format!("process gone: {e}"))?;
     let claude = w.claude;
     let lines = &mut w.lines;
+    let mut tool_blocks: Vec<String> = Vec::new();
     let read = async {
         loop {
             let line = lines.next_line().await.map_err(|e| e.to_string())?.ok_or("process exited")?;
             let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
+
+            if !claude {
+                if v["event"] == "step_update" && v["step_update"]["step_type"] == "tool" && v["step_update"]["state"] == "DONE" {
+                    let su = &v["step_update"];
+                    let info = &su["tool_info"];
+                    let name = su["tool_name"].as_str().or_else(|| info["name"].as_str()).unwrap_or("tool");
+                    let cmd = info["parameters"]["CommandLine"].as_str()
+                        .or_else(|| info["parameters"]["command"].as_str())
+                        .or_else(|| info["parameters"]["Path"].as_str())
+                        .unwrap_or("");
+                    let out = info["output"].as_str().unwrap_or("").trim();
+                    let summary = if !cmd.is_empty() {
+                        format!("● Ran `{cmd}`")
+                    } else {
+                        format!("● Executed {name}")
+                    };
+                    let block = if !out.is_empty() {
+                        format!("{summary}\n```\n{out}\n```")
+                    } else {
+                        summary
+                    };
+                    tool_blocks.push(block);
+                }
+            }
+
             let (delta, done) = if claude {
                 let d = (v["type"] == "stream_event" && v["event"]["delta"]["type"] == "text_delta")
                     .then(|| v["event"]["delta"]["text"].as_str().unwrap_or("").to_string());
@@ -252,7 +278,14 @@ async fn turn(w: &mut Warm, prompt: &str, tx: &Option<Sender<Value>>) -> Result<
                     .then(|| su["text_delta"].as_str().unwrap_or("").to_string());
                 let done = (v["event"] == "result").then(|| {
                     let r = &v["result"];
-                    if r["status"] == "SUCCESS" { Ok((r["response"].as_str().unwrap_or("").to_string(), r["conversation_id"].as_str().unwrap_or("").to_string())) }
+                    if r["status"] == "SUCCESS" {
+                        let mut final_text = r["response"].as_str().unwrap_or("").to_string();
+                        if !tool_blocks.is_empty() {
+                            let prefix = tool_blocks.join("\n\n");
+                            final_text = format!("{prefix}\n\n{final_text}").trim().to_string();
+                        }
+                        Ok((final_text, r["conversation_id"].as_str().unwrap_or("").to_string()))
+                    }
                     else { Err(r["error"].as_str().unwrap_or("agy error").to_string()) }
                 });
                 (d, done)

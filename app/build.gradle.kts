@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.clipsync"
+    namespace = "com.example.conduit"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.clipsync"
+        applicationId = "com.example.conduit"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

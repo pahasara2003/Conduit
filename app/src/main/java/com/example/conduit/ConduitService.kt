@@ -1,4 +1,4 @@
-package com.example.clipsync
+package com.example.conduit
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -25,7 +25,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 
-class ClipSyncService : Service() {
+class ConduitService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var serverSocket: ServerSocket? = null
@@ -37,7 +37,7 @@ class ClipSyncService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        ClipSyncRepository.init(this)
+        ConduitRepository.init(this)
         createNotificationChannel()
     }
 
@@ -60,11 +60,11 @@ class ClipSyncService : Service() {
 
         if (!running) {
             running = true
-            ClipSyncRepository.setServiceRunning(true)
+            ConduitRepository.setServiceRunning(true)
             startServer()
             scope.launch {
-                ClipSyncRepository.discoverPc(applicationContext)
-                ClipSyncRepository.registerPhoneWithPc(applicationContext)
+                ConduitRepository.discoverPc(applicationContext)
+                ConduitRepository.registerPhoneWithPc(applicationContext)
             }
         }
         return START_STICKY
@@ -72,7 +72,7 @@ class ClipSyncService : Service() {
 
     override fun onDestroy() {
         running = false
-        ClipSyncRepository.setServiceRunning(false)
+        ConduitRepository.setServiceRunning(false)
         try {
             serverSocket?.close()
         } catch (_: Exception) {
@@ -86,7 +86,7 @@ class ClipSyncService : Service() {
             try {
                 val server = ServerSocket().apply {
                     reuseAddress = true
-                    bind(InetSocketAddress(ClipSyncRepository.PHONE_PORT))
+                    bind(InetSocketAddress(ConduitRepository.PHONE_PORT))
                 }
                 serverSocket = server
                 while (running && !server.isClosed) {
@@ -98,7 +98,7 @@ class ClipSyncService : Service() {
                     launch { handleClient(client) }
                 }
             } catch (_: Exception) {
-                ClipSyncRepository.setServiceRunning(false)
+                ConduitRepository.setServiceRunning(false)
             }
         }
     }
@@ -151,7 +151,7 @@ class ClipSyncService : Service() {
             }
 
             if (method == "GET" && path == "/ping") {
-                writeResponse(output, 200, "clipsync-phone")
+                writeResponse(output, 200, "conduit-phone")
                 return
             }
 
@@ -166,7 +166,7 @@ class ClipSyncService : Service() {
                 val text = String(bodyBytes, 0, readTotal, Charsets.UTF_8)
                 val remoteIp = sock.inetAddress?.hostAddress
                 if (text.isNotEmpty()) {
-                    ClipSyncRepository.onReceivedFromPc(applicationContext, text, remoteIp)
+                    ConduitRepository.onReceivedFromPc(applicationContext, text, remoteIp)
                     mainHandler.post {
                         Toast.makeText(
                             applicationContext,
@@ -205,10 +205,10 @@ class ClipSyncService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "ClipSync Background Listener",
+            "Conduit Background Listener",
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Keeps ClipSync ready to receive clipboard from your PC"
+            description = "Keeps Conduit ready to receive clipboard from your PC"
         }
         manager.createNotificationChannel(channel)
     }
@@ -233,7 +233,7 @@ class ClipSyncService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val stopIntent = Intent(this, ClipSyncService::class.java).apply {
+        val stopIntent = Intent(this, ConduitService::class.java).apply {
             action = ACTION_STOP
         }
         val stopPending = PendingIntent.getService(
@@ -245,7 +245,7 @@ class ClipSyncService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_clip_sync)
-            .setContentTitle("ClipSync Active")
+            .setContentTitle("Conduit Active")
             .setContentText(contentText)
             .setOngoing(true)
             .setContentIntent(openPending)
@@ -255,17 +255,17 @@ class ClipSyncService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "clipsync_channel"
+        private const val CHANNEL_ID = "conduit_channel"
         private const val NOTIFICATION_ID = 1001
-        const val ACTION_STOP = "com.example.clipsync.STOP_SERVICE"
+        const val ACTION_STOP = "com.example.conduit.STOP_SERVICE"
 
         fun start(context: Context) {
-            val intent = Intent(context, ClipSyncService::class.java)
+            val intent = Intent(context, ConduitService::class.java)
             context.startForegroundService(intent)
         }
 
         fun stop(context: Context) {
-            context.stopService(Intent(context, ClipSyncService::class.java))
+            context.stopService(Intent(context, ConduitService::class.java))
         }
     }
 }

@@ -1,0 +1,11 @@
+[Unit]
+Description=Conduit PC Clipboard Server
+After=graphical-session.target
+
+[Service]
+ExecStart=/home/pahasara/AndroidProjects/Conduit/pc/conduit-daemon/target/release/conduit-daemon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

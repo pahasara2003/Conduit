@@ -1,4 +1,4 @@
-package com.example.clipsync
+package com.example.conduit
 
 import android.annotation.SuppressLint
 import android.app.PendingIntent
@@ -7,7 +7,7 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 
-class ClipSyncTileService : TileService() {
+class ConduitTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()

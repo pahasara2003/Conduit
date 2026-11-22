@@ -1,4 +1,4 @@
-package com.example.clipsync
+package com.example.conduit
 
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
@@ -11,14 +11,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.sp
-import com.example.clipsync.ui.theme.IdeAccent
-import com.example.clipsync.ui.theme.IdeSurfaceBrightDark
-import com.example.clipsync.ui.theme.SyntaxComment
-import com.example.clipsync.ui.theme.SyntaxKeyword
-import com.example.clipsync.ui.theme.SyntaxNumber
-import com.example.clipsync.ui.theme.SyntaxPlain
-import com.example.clipsync.ui.theme.SyntaxString
-import com.example.clipsync.ui.theme.SyntaxType
+import com.example.conduit.ui.theme.IdeAccent
+import com.example.conduit.ui.theme.IdeSurfaceBrightDark
+import com.example.conduit.ui.theme.SyntaxComment
+import com.example.conduit.ui.theme.SyntaxKeyword
+import com.example.conduit.ui.theme.SyntaxNumber
+import com.example.conduit.ui.theme.SyntaxPlain
+import com.example.conduit.ui.theme.SyntaxString
+import com.example.conduit.ui.theme.SyntaxType
 
 sealed class WorkspaceItem {
     abstract val id: String

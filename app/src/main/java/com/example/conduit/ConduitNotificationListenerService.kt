@@ -1,4 +1,4 @@
-package com.example.clipsync
+package com.example.conduit
 
 import android.app.Notification
 import android.content.Context
@@ -25,7 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayOutputStream
 
-class ClipSyncNotificationListenerService : NotificationListenerService() {
+class ConduitNotificationListenerService : NotificationListenerService() {
 
     private var lastNotificationKey: String? = null
     private var lastNotificationTime: Long = 0
@@ -71,10 +71,10 @@ class ClipSyncNotificationListenerService : NotificationListenerService() {
         }
 
         val imageBase64 = extractImageThumbnail(context, sbn.notification)
-        Log.d("ClipSyncNotification", "Extracted imageBase64: ${imageBase64 != null} (len: ${imageBase64?.length ?: 0}) for $pkg ($title)")
+        Log.d("ConduitNotification", "Extracted imageBase64: ${imageBase64 != null} (len: ${imageBase64?.length ?: 0}) for $pkg ($title)")
 
         runBlocking(Dispatchers.IO) {
-            ClipSyncRepository.sendNotificationToPc(context, appName, title, text, pkg, imageBase64)
+            ConduitRepository.sendNotificationToPc(context, appName, title, text, pkg, imageBase64)
         }
     }
 
@@ -92,7 +92,7 @@ class ClipSyncNotificationListenerService : NotificationListenerService() {
             drawable.draw(canvas)
             bmp
         } catch (e: Exception) {
-            Log.e("ClipSyncNotification", "iconToBitmap error", e)
+            Log.e("ConduitNotification", "iconToBitmap error", e)
             null
         }
     }
@@ -156,7 +156,7 @@ class ClipSyncNotificationListenerService : NotificationListenerService() {
                             }
                             if (bitmap != null) break
                         } catch (e: Exception) {
-                            Log.e("ClipSyncNotification", "dataUri decode error", e)
+                            Log.e("ConduitNotification", "dataUri decode error", e)
                         }
                     }
                 }

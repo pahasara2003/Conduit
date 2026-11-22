@@ -23,12 +23,12 @@ from pathlib import Path
 PC_PORT = 8765
 PHONE_PORT = 8766
 DISCOVERY_PORT = 8767
-STATE_DIR = Path.home() / ".config" / "clipsync"
+STATE_DIR = Path.home() / ".config" / "conduit"
 STATE_FILE = STATE_DIR / "state.json"
 SESSIONS_FILE = STATE_DIR / "sessions.json"
-AVATAR_DIR = Path.home() / ".cache" / "clipsync" / "avatars"
+AVATAR_DIR = Path.home() / ".cache" / "conduit" / "avatars"
 DEFAULT_AI_MODEL = "gemini-3.8-flash-low"
-DEFAULT_AI_CWD = str(Path.home() / "AndroidProjects" / "ClipSync")
+DEFAULT_AI_CWD = str(Path.home() / "AndroidProjects" / "Conduit")
 _SESSIONS_LOCK = threading.Lock()
 _MODELS_CACHE = {"ts": 0.0, "models": []}
 
@@ -50,7 +50,7 @@ def save_state(data: dict) -> None:
 
 
 def notify(title: str, body: str, image_data: bytes = None) -> None:
-    cmd = ["notify-send", "-a", "ClipSync"]
+    cmd = ["notify-send", "-a", "Conduit"]
     if image_data:
         try:
             AVATAR_DIR.mkdir(parents=True, exist_ok=True)
@@ -426,7 +426,7 @@ def ai_prompt(prompt: str, model: str = None, session_id: str = None, conversati
 API_TOKEN = os.environ.get("CLIPSYNC_TOKEN", "")
 
 
-class ClipSyncHandler(BaseHTTPRequestHandler):
+class ConduitHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
@@ -518,21 +518,21 @@ class ClipSyncHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/download/apk":
-            apk_path = Path("/home/pahasara/AndroidProjects/ClipSync/app/build/outputs/apk/debug/app-debug.apk")
+            apk_path = Path("/home/pahasara/AndroidProjects/Conduit/app/build/outputs/apk/debug/app-debug.apk")
             if not apk_path.exists():
                 self._send_text(404, "APK not found")
                 return
             data = apk_path.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "application/vnd.android.package-archive")
-            self.send_header("Content-Disposition", 'attachment; filename="ClipSync-AI.apk"')
+            self.send_header("Content-Disposition", 'attachment; filename="Conduit-AI.apk"')
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
             return
 
         if self.path == "/ping":
-            self._send_text(200, "clipsync-pc")
+            self._send_text(200, "conduit-pc")
             return
         if self.path == "/clip":
             clip = get_pc_clipboard()
@@ -714,7 +714,7 @@ def adb_keeper_loop():
 def send_clipboard_to_phone() -> int:
     text = get_pc_clipboard()
     if not text:
-        notify("ClipSync", "PC clipboard is empty")
+        notify("Conduit", "PC clipboard is empty")
         print("PC clipboard is empty")
         return 1
 
@@ -759,24 +759,24 @@ def send_clipboard_to_phone() -> int:
             print("Sent via USB/ADB")
             return 0
     except Exception as e:
-        notify("ClipSync Error", f"Phone unreachable: {e}")
+        notify("Conduit Error", f"Phone unreachable: {e}")
         print(f"Failed: {e}")
         return 1
 
-    notify("ClipSync Error", "Phone unreachable (check Wi-Fi or USB)")
+    notify("Conduit Error", "Phone unreachable (check Wi-Fi or USB)")
     return 1
 
 
 def run_server():
     threading.Thread(target=discovery_loop, daemon=True).start()
     threading.Thread(target=adb_keeper_loop, daemon=True).start()
-    server = ThreadingHTTPServer(("0.0.0.0", PC_PORT), ClipSyncHandler)
-    print(f"ClipSync PC server listening on 0.0.0.0:{PC_PORT}")
+    server = ThreadingHTTPServer(("0.0.0.0", PC_PORT), ConduitHandler)
+    print(f"Conduit PC server listening on 0.0.0.0:{PC_PORT}")
     server.serve_forever()
 
 
 def main():
-    parser = argparse.ArgumentParser(description="ClipSync PC Companion")
+    parser = argparse.ArgumentParser(description="Conduit PC Companion")
     parser.add_argument("--send", action="store_true", help="Send PC clipboard to phone")
     args = parser.parse_args()
 

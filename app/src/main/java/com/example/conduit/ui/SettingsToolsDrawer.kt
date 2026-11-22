@@ -1,4 +1,4 @@
-package com.example.clipsync.ui
+package com.example.conduit.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -76,18 +76,18 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
-import com.example.clipsync.AiSessionSummary
-import com.example.clipsync.ClipSyncRepository
-import com.example.clipsync.ClipSyncState
-import com.example.clipsync.SshInfo
-import com.example.clipsync.ui.theme.IdeTextMutedDark
-import com.example.clipsync.ui.theme.StatusError
-import com.example.clipsync.ui.theme.StatusOnline
+import com.example.conduit.AiSessionSummary
+import com.example.conduit.ConduitRepository
+import com.example.conduit.ConduitState
+import com.example.conduit.SshInfo
+import com.example.conduit.ui.theme.IdeTextMutedDark
+import com.example.conduit.ui.theme.StatusError
+import com.example.conduit.ui.theme.StatusOnline
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsToolsDrawer(
-    state: ClipSyncState,
+    state: ConduitState,
     sessions: List<AiSessionSummary>,
     activeSessionId: String?,
     onClose: () -> Unit,
@@ -383,7 +383,7 @@ fun SettingsToolsDrawer(
                             value = pcIpInput,
                             onValueChange = { pcIpInput = it },
                             label = { Text("PC Host") },
-                            placeholder = { Text(ClipSyncRepository.DEFAULT_TAILSCALE_HOST) },
+                            placeholder = { Text(ConduitRepository.DEFAULT_TAILSCALE_HOST) },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
                             trailingIcon = {
@@ -514,10 +514,10 @@ private fun DrawerSectionRow(
 private fun CompactSshPanel(pcHost: String) {
     val context = LocalContext.current
     var info by remember { mutableStateOf<SshInfo?>(null) }
-    LaunchedEffect(pcHost) { info = ClipSyncRepository.fetchSshInfo(context).getOrNull() }
+    LaunchedEffect(pcHost) { info = ConduitRepository.fetchSshInfo(context).getOrNull() }
     val user = info?.user ?: "pahasara"
     val port = info?.port ?: 22
-    val host = pcHost.ifBlank { info?.ip ?: ClipSyncRepository.DEFAULT_TAILSCALE_HOST }
+    val host = pcHost.ifBlank { info?.ip ?: ConduitRepository.DEFAULT_TAILSCALE_HOST }
 
     Column(
         modifier = Modifier

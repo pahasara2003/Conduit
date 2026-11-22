@@ -16,7 +16,7 @@ use sessions::PromptReq;
 const PC_PORT: u16 = 8765;
 const PHONE_PORT: u16 = 8766;
 const DISCOVERY_PORT: u16 = 8767;
-const APK: &str = "/home/pahasara/AndroidProjects/ClipSync/app/build/outputs/apk/debug/app-debug.apk";
+const APK: &str = "/home/pahasara/AndroidProjects/Conduit/app/build/outputs/apk/debug/app-debug.apk";
 
 fn err(code: StatusCode, msg: impl ToString) -> Response {
     (code, Json(json!({"status": "error", "error": msg.to_string()}))).into_response()
@@ -127,7 +127,7 @@ async fn clip_post(body: String) -> &'static str {
     "OK"
 }
 
-fn state_path() -> std::path::PathBuf { sys::home().join(".config/clipsync/state.json") }
+fn state_path() -> std::path::PathBuf { sys::home().join(".config/conduit/state.json") }
 
 fn save_state(patch: Value) {
     let mut cur = std::fs::read_to_string(state_path()).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or(json!({}));
@@ -172,7 +172,7 @@ fn b64_decode(s: &str) -> Option<Vec<u8>> {
 async fn download_apk() -> Response {
     match std::fs::read(APK) {
         Ok(b) => ([(header::CONTENT_TYPE, "application/vnd.android.package-archive"),
-                   (header::CONTENT_DISPOSITION, "attachment; filename=\"ClipSync-AI.apk\"")], b).into_response(),
+                   (header::CONTENT_DISPOSITION, "attachment; filename=\"Conduit-AI.apk\"")], b).into_response(),
         Err(_) => (StatusCode::NOT_FOUND, "APK not found").into_response(),
     }
 }
@@ -241,7 +241,7 @@ async fn main() {
     api = api.route("/api/sessions", get(sessions_list)).route("/api/ai/sessions", get(sessions_list).post(session_new));
 
     let app = api.layer(middleware::from_fn(auth))
-        .route("/ping", get(|| async { "clipsync-pc" }))
+        .route("/ping", get(|| async { "conduit-pc" }))
         .route("/clip", get(clip_get).post(clip_post))
         .route("/register", post(register))
         .route("/notification", post(notification))
@@ -252,6 +252,6 @@ async fn main() {
 
     let port: u16 = std::env::var("CLIPSYNC_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(PC_PORT);
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await.expect("bind :8765 (is the Python daemon still running?)");
-    println!("clipsync-daemon listening on 0.0.0.0:{port}");
+    println!("conduit-daemon listening on 0.0.0.0:{port}");
     axum::serve(listener, app).await.unwrap();
 }

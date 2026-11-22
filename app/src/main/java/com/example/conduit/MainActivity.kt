@@ -1,4 +1,4 @@
-package com.example.clipsync
+package com.example.conduit
 
 import android.Manifest
 import android.app.Activity
@@ -27,9 +27,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import com.example.clipsync.ui.IdeWorkspaceScreen
-import com.example.clipsync.ui.SettingsToolsDrawer
-import com.example.clipsync.ui.theme.ClipSyncTheme
+import com.example.conduit.ui.IdeWorkspaceScreen
+import com.example.conduit.ui.SettingsToolsDrawer
+import com.example.conduit.ui.theme.ConduitTheme
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { _ ->
-        ClipSyncService.start(this)
+        ConduitService.start(this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
-        ClipSyncRepository.init(this)
+        ConduitRepository.init(this)
 
         if (forwardIfQuickIntent(intent)) {
             return
@@ -58,8 +58,8 @@ class MainActivity : ComponentActivity() {
         ensureServiceAndPermissions()
 
         setContent {
-            ClipSyncTheme(darkTheme = true) {
-                ClipSyncIdeRoot(viewModel = viewModel)
+            ConduitTheme(darkTheme = true) {
+                ConduitIdeRoot(viewModel = viewModel)
             }
         }
     }
@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun ensureServiceAndPermissions() {
-        ClipSyncService.start(this)
+        ConduitService.start(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
                 this,
@@ -101,13 +101,13 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
-        const val ACTION_SEND_CLIPBOARD = "com.example.clipsync.ACTION_SEND_CLIPBOARD"
-        const val ACTION_PULL_CLIPBOARD = "com.example.clipsync.ACTION_PULL_CLIPBOARD"
+        const val ACTION_SEND_CLIPBOARD = "com.example.conduit.ACTION_SEND_CLIPBOARD"
+        const val ACTION_PULL_CLIPBOARD = "com.example.conduit.ACTION_PULL_CLIPBOARD"
     }
 }
 
 @Composable
-fun ClipSyncIdeRoot(viewModel: MainViewModel) {
+fun ConduitIdeRoot(viewModel: MainViewModel) {
     val context = LocalContext.current
     val syncState by viewModel.uiState.collectAsState()
     val workspaceState by viewModel.workspaceState.collectAsState()

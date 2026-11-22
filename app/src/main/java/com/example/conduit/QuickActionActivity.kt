@@ -1,4 +1,4 @@
-package com.example.clipsync
+package com.example.conduit
 
 import android.app.Activity
 import android.content.Intent
@@ -19,7 +19,7 @@ class QuickActionActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         disableTransition()
-        ClipSyncRepository.init(this)
+        ConduitRepository.init(this)
 
         when (intent?.action) {
             Intent.ACTION_PROCESS_TEXT -> {
@@ -53,7 +53,7 @@ class QuickActionActivity : Activity() {
         if (hasFocus && pendingClipboardSend && !handled) {
             pendingClipboardSend = false
             handled = true
-            val text = ClipSyncRepository.getPhoneClipboard(this)
+            val text = ConduitRepository.getPhoneClipboard(this)
             if (text.isNullOrEmpty()) {
                 Toast.makeText(applicationContext, "Phone clipboard is empty", Toast.LENGTH_SHORT).show()
                 finishSilently()
@@ -66,7 +66,7 @@ class QuickActionActivity : Activity() {
     private fun sendAndFinish(text: String) {
         handled = true
         scope.launch {
-            val result = ClipSyncRepository.sendToPc(applicationContext, text)
+            val result = ConduitRepository.sendToPc(applicationContext, text)
             val msg = result.fold(
                 onSuccess = { transport -> "Sent to PC ($transport) ✓" },
                 onFailure = { err -> "Send failed: ${err.message}" }
@@ -79,7 +79,7 @@ class QuickActionActivity : Activity() {
     private fun pullAndFinish() {
         handled = true
         scope.launch {
-            val result = ClipSyncRepository.pullFromPc(applicationContext)
+            val result = ConduitRepository.pullFromPc(applicationContext)
             val msg = result.fold(
                 onSuccess = { (_, transport) -> "Copied PC clipboard ($transport) ✓" },
                 onFailure = { err -> "Pull failed: ${err.message}" }

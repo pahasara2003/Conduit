@@ -1,4 +1,4 @@
-package com.example.clipsync.ui
+package com.example.conduit.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -90,32 +90,32 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.example.clipsync.BaseModelGroup
-import com.example.clipsync.ClipSyncState
-import com.example.clipsync.IdeWorkspaceState
-import com.example.clipsync.MarkdownSegment
-import com.example.clipsync.ReasoningEffort
-import com.example.clipsync.ToolActivityKind
-import com.example.clipsync.WorkspaceItem
+import com.example.conduit.BaseModelGroup
+import com.example.conduit.ConduitState
+import com.example.conduit.IdeWorkspaceState
+import com.example.conduit.MarkdownSegment
+import com.example.conduit.ReasoningEffort
+import com.example.conduit.ToolActivityKind
+import com.example.conduit.WorkspaceItem
 import kotlin.math.roundToInt
-import com.example.clipsync.highlightCodeSyntax
-import com.example.clipsync.parseInlineMarkdown
-import com.example.clipsync.parseMarkdownSegments
-import com.example.clipsync.ui.theme.CodeBg
-import com.example.clipsync.ui.theme.CodeBorder
-import com.example.clipsync.ui.theme.CodeHeaderBg
-import com.example.clipsync.ui.theme.IdeAccent
-import com.example.clipsync.ui.theme.IdeTextMutedDark
-import com.example.clipsync.ui.theme.IdeUserBubbleDark
-import com.example.clipsync.ui.theme.StatusError
-import com.example.clipsync.ui.theme.StatusOnline
-import com.example.clipsync.ui.theme.StatusWarning
-import com.example.clipsync.ui.theme.SyntaxPlain
+import com.example.conduit.highlightCodeSyntax
+import com.example.conduit.parseInlineMarkdown
+import com.example.conduit.parseMarkdownSegments
+import com.example.conduit.ui.theme.CodeBg
+import com.example.conduit.ui.theme.CodeBorder
+import com.example.conduit.ui.theme.CodeHeaderBg
+import com.example.conduit.ui.theme.IdeAccent
+import com.example.conduit.ui.theme.IdeTextMutedDark
+import com.example.conduit.ui.theme.IdeUserBubbleDark
+import com.example.conduit.ui.theme.StatusError
+import com.example.conduit.ui.theme.StatusOnline
+import com.example.conduit.ui.theme.StatusWarning
+import com.example.conduit.ui.theme.SyntaxPlain
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IdeWorkspaceScreen(
-    syncState: ClipSyncState,
+    syncState: ConduitState,
     workspaceState: IdeWorkspaceState,
     promptInput: String,
     isVoiceActive: Boolean,

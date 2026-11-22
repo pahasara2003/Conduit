@@ -1,4 +1,4 @@
-package com.example.clipsync.ui.theme
+package com.example.conduit.ui.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -57,7 +57,7 @@ private val LightColors = lightColorScheme(
 )
 
 @Composable
-fun ClipSyncTheme(
+fun ConduitTheme(
     darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {
