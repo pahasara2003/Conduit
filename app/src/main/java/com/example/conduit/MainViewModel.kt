@@ -398,12 +398,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             setWorking(true, "${cur.selectedBaseModel.displayName} is thinking...")
-            val result = ConduitRepository.sendAiPromptInSession(
+            val result = ConduitRepository.streamAiPromptInSession(
                 prompt = trimmed,
                 model = currentModel.id,
                 effort = currentEffort.key,
                 sessionId = currentSession?.id,
-                conversationId = currentSession?.conversationId?.takeIf { it.isNotBlank() }
+                conversationId = currentSession?.conversationId?.takeIf { it.isNotBlank() },
+                onStatus = { liveStatus ->
+                    setWorking(true, liveStatus)
+                }
             )
             result.fold(
                 onSuccess = { res ->

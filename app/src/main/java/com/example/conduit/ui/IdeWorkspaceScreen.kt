@@ -101,6 +101,10 @@ import kotlin.math.roundToInt
 import com.example.conduit.highlightCodeSyntax
 import com.example.conduit.parseInlineMarkdown
 import com.example.conduit.parseMarkdownSegments
+import com.example.conduit.InlineToken
+import com.example.conduit.cleanInlineMarkdown
+import com.example.conduit.tokenizeInlineMarkdown
+import com.example.conduit.ui.theme.IdeSurfaceBrightDark
 import com.example.conduit.ui.theme.CodeBg
 import com.example.conduit.ui.theme.CodeBorder
 import com.example.conduit.ui.theme.CodeHeaderBg
@@ -476,9 +480,8 @@ private fun AssistantStreamBlock(
             when (segment) {
                 is MarkdownSegment.Heading -> MarkdownHeading(segment)
                 is MarkdownSegment.Paragraph -> {
-                    val styled = remember(segment.text) { parseInlineMarkdown(segment.text) }
-                    Text(
-                        text = styled,
+                    MarkdownInlineText(
+                        text = segment.text,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onBackground
                     )
@@ -583,10 +586,104 @@ private data class HeadingStyle(
 )
 
 @Composable
+private fun MarkdownInlineText(
+    text: String,
+    modifier: Modifier = Modifier,
+    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge,
+    color: Color = MaterialTheme.colorScheme.onBackground
+) {
+    val tokens = remember(text) { tokenizeInlineMarkdown(text) }
+    // If no inline code pills, use normal Text
+    val hasCode = remember(tokens) { tokens.any { it is InlineToken.Code } }
+    if (!hasCode) {
+        val styled = remember(text) { parseInlineMarkdown(text) }
+        Text(text = styled, style = style, color = color, modifier = modifier)
+        return
+    }
+
+    // Render with rounded pills for inline code blocks
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        tokens.forEach { token ->
+            when (token) {
+                is InlineToken.Code -> {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = IdeSurfaceBrightDark,
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    ) {
+                        Text(
+                            text = token.code,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFFE2E8F0),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                is InlineToken.Text -> {
+                    if (token.text.isNotEmpty()) {
+                        Text(
+                            text = token.text,
+                            style = style,
+                            color = color
+                        )
+                    }
+                }
+                is InlineToken.Bold -> {
+                    Text(
+                        text = token.text,
+                        style = style.copy(fontWeight = FontWeight.SemiBold),
+                        color = color
+                    )
+                }
+                is InlineToken.Italic -> {
+                    Text(
+                        text = token.text,
+                        style = style.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                        color = color
+                    )
+                }
+                is InlineToken.BoldItalic -> {
+                    Text(
+                        text = token.text,
+                        style = style.copy(fontWeight = FontWeight.Bold, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                        color = color
+                    )
+                }
+                is InlineToken.Link -> {
+                    Text(
+                        text = token.label,
+                        style = style.copy(color = IdeAccent),
+                        modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun MarkdownTable(
     headers: List<String>,
     rows: List<List<String>>
 ) {
+    // Dynamically calculate the minimum column widths so the cell can comfortably contain its largest element
+    val columnWidths = remember(headers, rows) {
+        headers.indices.map { colIdx ->
+            val maxLen = maxOf(
+                cleanInlineMarkdown(headers.getOrElse(colIdx) { "" }).length,
+                rows.maxOfOrNull { cleanInlineMarkdown(it.getOrElse(colIdx) { "" }).length } ?: 0
+            )
+            // Allocate roughly 9.5dp per character with padding, clamped between 110dp and 340dp
+            (maxLen * 9.5f + 24f).coerceIn(110f, 340f).dp
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -604,20 +701,19 @@ private fun MarkdownTable(
                 Row(
                     modifier = Modifier
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     headers.forEachIndexed { colIdx, headerText ->
-                        val styledHeader = remember(headerText) { parseInlineMarkdown(headerText) }
+                        val colWidth = columnWidths.getOrElse(colIdx) { 130.dp }
                         Box(
                             modifier = Modifier
-                                .widthIn(min = 100.dp, max = 220.dp)
+                                .width(colWidth)
                                 .padding(horizontal = 10.dp)
                         ) {
-                            Text(
-                                text = styledHeader,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
+                            MarkdownInlineText(
+                                text = headerText,
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -638,15 +734,15 @@ private fun MarkdownTable(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         headers.indices.forEach { colIdx ->
+                            val colWidth = columnWidths.getOrElse(colIdx) { 130.dp }
                             val cellText = rowCells.getOrNull(colIdx) ?: ""
-                            val styledCell = remember(cellText) { parseInlineMarkdown(cellText) }
                             Box(
                                 modifier = Modifier
-                                    .widthIn(min = 100.dp, max = 220.dp)
+                                    .width(colWidth)
                                     .padding(horizontal = 10.dp)
                             ) {
-                                Text(
-                                    text = styledCell,
+                                MarkdownInlineText(
+                                    text = cellText,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onBackground
                                 )

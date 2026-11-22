@@ -74,6 +74,62 @@ enum class ToolActivityKind {
     THOUGHT
 }
 
+sealed class InlineToken {
+    data class Text(val text: String) : InlineToken()
+    data class Code(val code: String) : InlineToken()
+    data class Bold(val text: String) : InlineToken()
+    data class Italic(val text: String) : InlineToken()
+    data class BoldItalic(val text: String) : InlineToken()
+    data class Link(val label: String, val url: String) : InlineToken()
+}
+
+fun tokenizeInlineMarkdown(text: String): List<InlineToken> {
+    val tokens = mutableListOf<InlineToken>()
+    var cursor = 0
+    for (match in INLINE_MD_REGEX.findAll(text)) {
+        if (match.range.first > cursor) {
+            tokens.add(InlineToken.Text(text.substring(cursor, match.range.first)))
+        }
+        val token = match.value
+        when {
+            token.startsWith("`") && token.endsWith("`") -> {
+                tokens.add(InlineToken.Code(token.substring(1, token.length - 1)))
+            }
+            token.startsWith("***") && token.endsWith("***") -> {
+                tokens.add(InlineToken.BoldItalic(token.substring(3, token.length - 3)))
+            }
+            token.startsWith("**") && token.endsWith("**") -> {
+                tokens.add(InlineToken.Bold(token.substring(2, token.length - 2)))
+            }
+            token.startsWith("*") && token.endsWith("*") -> {
+                tokens.add(InlineToken.Italic(token.substring(1, token.length - 1)))
+            }
+            token.startsWith("[") && match.groupValues.size >= 3 -> {
+                tokens.add(InlineToken.Link(match.groupValues[2], match.groupValues.getOrNull(3) ?: ""))
+            }
+            else -> tokens.add(InlineToken.Text(token))
+        }
+        cursor = match.range.last + 1
+    }
+    if (cursor < text.length) {
+        tokens.add(InlineToken.Text(text.substring(cursor)))
+    }
+    return tokens
+}
+
+fun cleanInlineMarkdown(text: String): String {
+    val tokens = tokenizeInlineMarkdown(text)
+    return tokens.joinToString("") { token ->
+        when (token) {
+            is InlineToken.Text -> token.text
+            is InlineToken.Code -> token.code
+            is InlineToken.Bold -> token.text
+            is InlineToken.Italic -> token.text
+            is InlineToken.BoldItalic -> token.text
+            is InlineToken.Link -> token.label
+        }
+    }
+}
 sealed class MarkdownSegment {
     data class Heading(val level: Int, val text: String) : MarkdownSegment()
     data class Paragraph(val text: String) : MarkdownSegment()
@@ -380,7 +436,6 @@ private val INLINE_MD_REGEX = Regex(
 
 fun parseInlineMarkdown(
     text: String,
-    inlineCodeBg: Color = IdeSurfaceBrightDark,
     inlineCodeColor: Color = Color(0xFFE2E8F0),
     linkColor: Color = IdeAccent
 ): AnnotatedString = buildAnnotatedString {
@@ -397,11 +452,10 @@ fun parseInlineMarkdown(
                     SpanStyle(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
-                        color = inlineCodeColor,
-                        background = inlineCodeBg
+                        color = inlineCodeColor
                     )
                 ) {
-                    append("\u00A0$code\u00A0")
+                    append(code)
                 }
             }
             token.startsWith("***") && token.endsWith("***") -> {

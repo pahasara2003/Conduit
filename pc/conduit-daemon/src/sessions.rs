@@ -241,33 +241,52 @@ async fn turn(w: &mut Warm, prompt: &str, tx: &Option<Sender<Value>>) -> Result<
             let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
 
             if !claude {
-                if v["event"] == "step_update" && v["step_update"]["step_type"] == "tool" && v["step_update"]["state"] == "DONE" {
+                if v["event"] == "step_update" {
                     let su = &v["step_update"];
-                    let info = &su["tool_info"];
-                    let name = su["tool_name"].as_str().or_else(|| info["name"].as_str()).unwrap_or("tool");
-                    let cmd = info["parameters"]["CommandLine"].as_str()
-                        .or_else(|| info["parameters"]["command"].as_str())
-                        .or_else(|| info["parameters"]["Path"].as_str())
-                        .unwrap_or("");
-                    let raw_out = info["output"].as_str().unwrap_or("").trim();
-                    let clean_out = if let Some(pos) = raw_out.find("Command output:\n") {
-                        raw_out[pos + "Command output:\n".len()..].trim()
-                    } else if let Some(pos) = raw_out.find("Command output:\r\n") {
-                        raw_out[pos + "Command output:\r\n".len()..].trim()
-                    } else {
-                        raw_out
-                    };
-                    let summary = if !cmd.is_empty() {
-                        format!("● Ran `{cmd}`")
-                    } else {
-                        format!("● Executed {name}")
-                    };
-                    let block = if !clean_out.is_empty() {
-                        format!("{summary}\n```\n{clean_out}\n```")
-                    } else {
-                        summary
-                    };
-                    tool_blocks.push(block);
+                    let st = su["step_type"].as_str().unwrap_or("");
+                    let state = su["state"].as_str().unwrap_or("");
+                    if st == "tool" {
+                        let info = &su["tool_info"];
+                        let name = su["tool_name"].as_str().or_else(|| info["name"].as_str()).unwrap_or("tool");
+                        let cmd = info["parameters"]["CommandLine"].as_str()
+                            .or_else(|| info["parameters"]["command"].as_str())
+                            .or_else(|| info["parameters"]["Path"].as_str())
+                            .unwrap_or("");
+
+                        if state == "ACTIVE" {
+                            let status_text = if !cmd.is_empty() {
+                                format!("Running `{cmd}`...")
+                            } else {
+                                format!("Executing {name}...")
+                            };
+                            if let Some(tx) = tx {
+                                let _ = tx.send(json!({"type": "status", "status": status_text})).await;
+                            }
+                        } else if state == "DONE" {
+                            let raw_out = info["output"].as_str().unwrap_or("").trim();
+                            let clean_out = if let Some(pos) = raw_out.find("Command output:\n") {
+                                raw_out[pos + "Command output:\n".len()..].trim()
+                            } else if let Some(pos) = raw_out.find("Command output:\r\n") {
+                                raw_out[pos + "Command output:\r\n".len()..].trim()
+                            } else {
+                                raw_out
+                            };
+                            let summary = if !cmd.is_empty() {
+                                format!("● Ran `{cmd}`")
+                            } else {
+                                format!("● Executed {name}")
+                            };
+                            let block = if !clean_out.is_empty() {
+                                format!("{summary}\n```\n{clean_out}\n```")
+                            } else {
+                                summary.clone()
+                            };
+                            tool_blocks.push(block.clone());
+                            if let Some(tx) = tx {
+                                let _ = tx.send(json!({"type": "tool_done", "summary": summary, "block": block})).await;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -298,7 +317,7 @@ async fn turn(w: &mut Warm, prompt: &str, tx: &Option<Sender<Value>>) -> Result<
                 (d, done)
             };
             if let (Some(d), Some(tx)) = (delta, tx) {
-                if !d.is_empty() { let _ = tx.send(json!({"delta": d})).await; }
+                if !d.is_empty() { let _ = tx.send(json!({"type": "delta", "delta": d})).await; }
             }
             if let Some(r) = done { return r; }
         }

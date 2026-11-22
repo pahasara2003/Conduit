@@ -403,6 +403,103 @@ object ConduitRepository {
         return sendAiPromptInSession(prompt = prompt).map { it.reply }
     }
 
+    suspend fun streamAiPromptInSession(
+        prompt: String,
+        model: String? = null,
+        effort: String? = null,
+        sessionId: String? = null,
+        conversationId: String? = null,
+        onStatus: (String) -> Unit
+    ): Result<AiPromptResult> = withContext(Dispatchers.IO) {
+        val trimmed = prompt.trim()
+        if (trimmed.isEmpty()) {
+            return@withContext Result.failure(IllegalArgumentException("Prompt is empty"))
+        }
+        val payload = JSONObject().apply {
+            put("prompt", trimmed)
+            put("stream", true)
+            if (!model.isNullOrBlank()) put("model", model)
+            if (!effort.isNullOrBlank()) put("effort", effort)
+            if (!sessionId.isNullOrBlank()) put("session_id", sessionId)
+            if (!conversationId.isNullOrBlank()) put("conversation_id", conversationId)
+        }.toString()
+
+        var lastError: Throwable = IllegalStateException("PC unreachable")
+        for ((host, label) in buildPcTargets(appContext)) {
+            val url = URL("http://$host:$PC_PORT/api/sessions/prompt")
+            var conn: HttpURLConnection? = null
+            try {
+                conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 3000
+                    readTimeout = 185_000
+                    doInput = true
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    setRequestProperty("Accept", "text/event-stream")
+                    val token = currentApiToken()
+                    if (token.isNotEmpty()) {
+                        setRequestProperty("Authorization", "Bearer $token")
+                    }
+                }
+
+                conn.outputStream.use { os ->
+                    OutputStreamWriter(os, "UTF-8").use { it.write(payload) }
+                }
+
+                val code = conn.responseCode
+                if (code in 200..299) {
+                    markConnection(true, label)
+                    var lastResult: AiPromptResult? = null
+                    conn.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+                        for (rawLine in lines) {
+                            val line = rawLine.trim()
+                            if (line.startsWith("data:")) {
+                                val dataJson = line.removePrefix("data:").trim()
+                                if (dataJson.isNotEmpty()) {
+                                    runCatching {
+                                        val j = JSONObject(dataJson)
+                                        val type = j.optString("type")
+                                        if (type == "status") {
+                                            val statusMsg = j.optString("status")
+                                            if (statusMsg.isNotEmpty()) {
+                                                withContext(Dispatchers.Main) {
+                                                    onStatus(statusMsg)
+                                                }
+                                            }
+                                        } else if (j.optBoolean("done", false)) {
+                                            if (j.optString("status") == "error") {
+                                                throw IllegalStateException(j.optString("error", "AI failed"))
+                                            }
+                                            val sessObj = j.optJSONObject("session")
+                                            lastResult = AiPromptResult(
+                                                reply = j.optString("reply", ""),
+                                                model = j.optString("model", model ?: DEFAULT_AI_MODEL),
+                                                modelLabel = j.optString("model_label", model ?: DEFAULT_AI_MODEL),
+                                                sessionId = j.optString("session_id", sessionId ?: ""),
+                                                conversationId = j.optString("conversation_id", conversationId ?: ""),
+                                                session = sessObj?.let { parseSessionSummary(it) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (lastResult != null) {
+                        return@withContext Result.success(lastResult!!)
+                    }
+                }
+            } catch (e: Exception) {
+                lastError = e
+            } finally {
+                conn?.disconnect()
+            }
+        }
+        // Fallback to non-streaming if SSE fails
+        sendAiPromptInSession(prompt, model, effort, sessionId, conversationId)
+    }
+
     suspend fun sendAiPromptInSession(
         prompt: String,
         model: String? = null,
