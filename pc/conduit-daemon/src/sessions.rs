@@ -249,14 +249,21 @@ async fn turn(w: &mut Warm, prompt: &str, tx: &Option<Sender<Value>>) -> Result<
                         .or_else(|| info["parameters"]["command"].as_str())
                         .or_else(|| info["parameters"]["Path"].as_str())
                         .unwrap_or("");
-                    let out = info["output"].as_str().unwrap_or("").trim();
+                    let raw_out = info["output"].as_str().unwrap_or("").trim();
+                    let clean_out = if let Some(pos) = raw_out.find("Command output:\n") {
+                        raw_out[pos + "Command output:\n".len()..].trim()
+                    } else if let Some(pos) = raw_out.find("Command output:\r\n") {
+                        raw_out[pos + "Command output:\r\n".len()..].trim()
+                    } else {
+                        raw_out
+                    };
                     let summary = if !cmd.is_empty() {
                         format!("● Ran `{cmd}`")
                     } else {
                         format!("● Executed {name}")
                     };
-                    let block = if !out.is_empty() {
-                        format!("{summary}\n```\n{out}\n```")
+                    let block = if !clean_out.is_empty() {
+                        format!("{summary}\n```\n{clean_out}\n```")
                     } else {
                         summary
                     };

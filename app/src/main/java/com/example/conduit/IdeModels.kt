@@ -168,7 +168,7 @@ fun parseMarkdownSegments(raw: String): List<MarkdownSegment> {
             continue
         }
 
-        // Tool activity lines (e.g. "● Ran 2 commands (adb devices · ...)", "● Edited ...", "● Thought for ...")
+        // Tool activity lines (e.g. "● Ran `fastfetch`", "● Ran 2 commands ...", "● Edited ...", "● Thought for ...")
         if (TOOL_LINE_REGEX.matches(trimmed)) {
             flushParagraph()
             val cleanedSummary = trimmed
@@ -178,9 +178,43 @@ fun parseMarkdownSegments(raw: String): List<MarkdownSegment> {
                 .replace(Regex("""\s*\((?:tap|click|ctrl\+\w+)\s+to\s+expand\)\s*$""", RegexOption.IGNORE_CASE), "")
                 .trim()
 
-            // Collect optional indented/tree continuation lines under the tool line
-            val detailLines = mutableListOf<String>()
+            // Check if the immediately following lines are a fenced code block containing the tool's output
             var j = i + 1
+            var codeDetails: String? = null
+            // Skip any empty line between the tool header and code block
+            while (j < lines.size && lines[j].trim().isEmpty()) {
+                j++
+            }
+            if (j < lines.size && lines[j].trim().startsWith("```")) {
+                val blockLines = mutableListOf<String>()
+                j++ // skip opening ```
+                while (j < lines.size) {
+                    val lineInside = lines[j]
+                    if (lineInside.trim().startsWith("```")) {
+                        j++ // skip closing ```
+                        codeDetails = blockLines.joinToString("\n")
+                        break
+                    }
+                    blockLines.add(lineInside)
+                    j++
+                }
+            }
+
+            if (codeDetails != null) {
+                segments.add(
+                    MarkdownSegment.ToolActivity(
+                        summary = cleanedSummary,
+                        details = codeDetails.trim(),
+                        kind = classifyToolKind(cleanedSummary)
+                    )
+                )
+                i = j
+                continue
+            }
+
+            // Fallback: Collect optional indented/tree continuation lines under the tool line
+            val detailLines = mutableListOf<String>()
+            j = i + 1
             while (j < lines.size) {
                 val nextLine = lines[j]
                 val nextTrimmed = nextLine.trim()
