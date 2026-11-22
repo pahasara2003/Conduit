@@ -31,30 +31,20 @@ Most mobile developer apps fall into two traps:
 ## 🏛️ Architecture Overview
 
 ```mermaid
-flowchart TD
-    subgraph Mobile ["📱 Android Client (Conduit App)"]
-        UI["Jetpack Compose UI<br/>(Markdown AST • Color Spectrum Slider • Tool Cards)"]
-        Repo["ConduitRepository<br/>(StateFlow • UDP Broadcast • HTTP Client)"]
-        UI --> Repo
-    end
+flowchart LR
+    A["📱 Conduit Mobile<br/>(Android / Jetpack Compose)"]
+    T{"🔒 Tailscale WireGuard<br/>(P2P Encrypted Mesh)"}
+    D["⚡ conduit-daemon<br/>(Rust / Tokio / Axum)"]
+    W["🤖 Warm Worker Pool<br/>(AGY Neon • Claude Code • Shell)"]
 
-    subgraph Transport ["🔒 Encrypted Wire"]
-        Tailscale["Tailscale Mesh VPN / USB Reverse Tunnel (Port 8765)"]
-        Repo <==> Tailscale
-    end
+    A <===>|HTTP / SSE| T
+    T <===>|Port 8765| D
+    D <--->|Persistent Stdin / Stdout| W
 
-    subgraph Workstation ["🖥️ Workstation Host (Linux)"]
-        Daemon["conduit-daemon (Rust / Axum)"]
-        WarmPool["Warm Process Worker Pool<br/>(Keeps instances pre-warmed)"]
-        SystemServices["System APIs<br/>(Screenshots • Fastfetch Stats • Shell Exec • Clipboard)"]
-        
-        Tailscale <==> Daemon
-        Daemon --> WarmPool
-        Daemon --> SystemServices
-
-        WarmPool --> AGY["AGY Engine<br/>(Gemini 4 Neon / 3.8 Flash)"]
-        WarmPool --> Claude["Claude Code<br/>(Sonnet 3.7 / 5.5)"]
-    end
+    style A fill:#121316,stroke:#6366F1,stroke-width:1.5px,color:#F4F4F5
+    style T fill:#121316,stroke:#4B5563,stroke-width:1.5px,color:#9CA3AF
+    style D fill:#121316,stroke:#E09A65,stroke-width:1.5px,color:#F4F4F5
+    style W fill:#121316,stroke:#22C55E,stroke-width:1.5px,color:#F4F4F5
 ```
 
 ---
@@ -83,33 +73,24 @@ Commands run by the AI (`fastfetch`, file edits, git commands) are intercepted a
 
 ---
 
-## 🔄 Interaction Lifecycle
+## 🔄 Stream & Execution Flow
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor User as 👤 Developer
-    participant Mobile as 📱 Conduit Android
-    participant Daemon as ⚡ conduit-daemon (Rust)
-    participant Engine as 🤖 AI Worker (AGY / Claude)
-    participant Host as 💻 Linux Workstation
+flowchart LR
+    P["👤 Prompt<br/>(Query + Effort)"]
+    D["⚡ Daemon<br/>(Session Router)"]
+    T["🛠️ Intercepted Tools<br/>(fastfetch • bash • edits)"]
+    M["📱 Interactive Card<br/>(Collapsible Tool • Markdown)"]
 
-    User->>Mobile: Enters prompt ("Run fastfetch and inspect disk")
-    Mobile->>Daemon: POST /api/sessions/prompt (streamed JSON)
-    Daemon->>Engine: Pipes prompt into warm worker stdin
-    
-    rect rgb(20, 24, 33)
-        note over Daemon,Engine: Real-Time Event Loop
-        Engine-->>Daemon: Event: tool_call (fastfetch)
-        Daemon->>Host: Executes command in workspace
-        Host-->>Daemon: Command stdout/stderr
-        Daemon-->>Mobile: SSE Delta: "● Ran `fastfetch`" + output block
-        Engine-->>Daemon: Event: agent_response (Markdown summary)
-        Daemon-->>Mobile: SSE Delta: Final formatted response
-    end
+    P ==>|POST| D
+    D <--->|Sub-second event stream| T
+    T ==>|SSE delta chunk| M
+    D ==>|Final response| M
 
-    Daemon-->>Mobile: Complete Session JSON + Updated State
-    Mobile->>User: Displays interactive collapsible card + formatted specs
+    style P fill:#121316,stroke:#6366F1,stroke-width:1.5px,color:#F4F4F5
+    style D fill:#121316,stroke:#E09A65,stroke-width:1.5px,color:#F4F4F5
+    style T fill:#121316,stroke:#3B82F6,stroke-width:1.5px,color:#F4F4F5
+    style M fill:#121316,stroke:#22C55E,stroke-width:1.5px,color:#F4F4F5
 ```
 
 ---
