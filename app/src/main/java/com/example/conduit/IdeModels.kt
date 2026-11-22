@@ -84,6 +84,10 @@ sealed class MarkdownSegment {
         val details: String,
         val kind: ToolActivityKind
     ) : MarkdownSegment()
+    data class Table(
+        val headers: List<String>,
+        val rows: List<List<String>>
+    ) : MarkdownSegment()
     data object Divider : MarkdownSegment()
 }
 
@@ -114,6 +118,27 @@ private fun extractParentheticalDetails(summary: String): String {
         return inner
     }
     return summary
+}
+
+private fun isTableRow(line: String): Boolean {
+    val t = line.trim()
+    return t.startsWith("|") && t.endsWith("|") && t.count { it == '|' } >= 2
+}
+
+private fun isTableSeparator(line: String): Boolean {
+    val t = line.trim()
+    if (!isTableRow(t)) return false
+    val cells = parseTableCells(t)
+    return cells.isNotEmpty() && cells.all { cell ->
+        val clean = cell.trim().removePrefix(":").removeSuffix(":")
+        clean.isNotEmpty() && clean.all { it == '-' }
+    }
+}
+
+private fun parseTableCells(row: String): List<String> {
+    val trimmed = row.trim()
+    val inside = trimmed.removePrefix("|").removeSuffix("|")
+    return inside.split("|").map { it.trim() }
 }
 
 fun parseMarkdownSegments(raw: String): List<MarkdownSegment> {
@@ -314,6 +339,23 @@ fun parseMarkdownSegments(raw: String): List<MarkdownSegment> {
                 )
             )
             i++
+            continue
+        }
+
+        // Table rows (| col 1 | col 2 |)
+        if (isTableRow(trimmed) && i + 1 < lines.size && isTableSeparator(lines[i + 1])) {
+            flushParagraph()
+            val headers = parseTableCells(trimmed)
+            val rows = mutableListOf<List<String>>()
+            var k = i + 2 // skip separator row
+            while (k < lines.size) {
+                val nextRow = lines[k].trim()
+                if (!isTableRow(nextRow) || nextRow.isEmpty()) break
+                rows.add(parseTableCells(nextRow))
+                k++
+            }
+            segments.add(MarkdownSegment.Table(headers, rows))
+            i = k
             continue
         }
 

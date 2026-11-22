@@ -491,6 +491,12 @@ private fun AssistantStreamBlock(
                         onCopy = { onCopy(segment.code) }
                     )
                 }
+                is MarkdownSegment.Table -> {
+                    MarkdownTable(
+                        headers = segment.headers,
+                        rows = segment.rows
+                    )
+                }
                 is MarkdownSegment.ToolActivity -> {
                     CollapsibleToolCard(
                         summary = segment.summary,
@@ -575,6 +581,89 @@ private data class HeadingStyle(
     val topPadding: androidx.compose.ui.unit.Dp,
     val color: Color
 )
+
+@Composable
+private fun MarkdownTable(
+    headers: List<String>,
+    rows: List<List<String>>
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = 4.dp)
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+                // Header Row
+                Row(
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    headers.forEachIndexed { colIdx, headerText ->
+                        val styledHeader = remember(headerText) { parseInlineMarkdown(headerText) }
+                        Box(
+                            modifier = Modifier
+                                .widthIn(min = 100.dp, max = 220.dp)
+                                .padding(horizontal = 10.dp)
+                        ) {
+                            Text(
+                                text = styledHeader,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
+
+                // Body Rows
+                rows.forEachIndexed { rowIdx, rowCells ->
+                    Row(
+                        modifier = Modifier
+                            .background(
+                                if (rowIdx % 2 == 1) MaterialTheme.colorScheme.surface.copy(alpha = 0.35f)
+                                else Color.Transparent
+                            )
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        headers.indices.forEach { colIdx ->
+                            val cellText = rowCells.getOrNull(colIdx) ?: ""
+                            val styledCell = remember(cellText) { parseInlineMarkdown(cellText) }
+                            Box(
+                                modifier = Modifier
+                                    .widthIn(min = 100.dp, max = 220.dp)
+                                    .padding(horizontal = 10.dp)
+                            ) {
+                                Text(
+                                    text = styledCell,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                            }
+                        }
+                    }
+                    if (rowIdx < rows.size - 1) {
+                        HorizontalDivider(
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun MarkdownBulletRow(item: MarkdownSegment.BulletItem) {
