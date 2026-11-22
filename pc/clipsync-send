@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /home/pahasara/AndroidProjects/ClipSync/pc/clipsync_pc.py --send "$@"

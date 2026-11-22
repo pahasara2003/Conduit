@@ -1,0 +1,44 @@
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+build/
+app/build/
+pc/clipsync-daemon/target/
+
+# Gradle files
+.gradle/
+buildOutputCleanup/
+
+# Android Studio / IntelliJ IDEA
+.idea/
+.gradle/
+local.properties
+*.iml
+.navigation/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Kotlin
+.kotlin/

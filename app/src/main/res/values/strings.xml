@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ClipSync</string>
+    <string name="process_text_label">Send to PC</string>
+    <string name="tile_label">Send Clipboard</string>
+    <string name="shortcut_send_short">Send Clip</string>
+    <string name="shortcut_send_long">Send Clipboard to PC</string>
+    <string name="shortcut_pull_short">Get PC Clip</string>
+    <string name="shortcut_pull_long">Pull PC Clipboard</string>
+</resources>

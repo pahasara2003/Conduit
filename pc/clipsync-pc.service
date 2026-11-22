@@ -1,0 +1,11 @@
+[Unit]
+Description=ClipSync PC Clipboard Server
+After=graphical-session.target
+
+[Service]
+ExecStart=/home/pahasara/AndroidProjects/ClipSync/pc/clipsync-daemon/target/release/clipsync-daemon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
