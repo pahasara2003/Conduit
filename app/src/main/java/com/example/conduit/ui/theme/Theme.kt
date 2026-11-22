@@ -56,6 +56,18 @@ private val LightColors = lightColorScheme(
     onError = Color.White
 )
 
+/** Colours that Material's scheme has no slot for, and that differ between dark and light. */
+data class IdeExtras(val muted: Color, val userBubble: Color, val codePill: Color, val codePillText: Color)
+
+private val DarkExtras = IdeExtras(IdeTextMutedDark, IdeUserBubbleDark, IdeSurfaceBrightDark, Color(0xFFE2E8F0))
+private val LightExtras = IdeExtras(Color(0xFF71717A), Color(0xFFE8EAFB), Color(0xFFEDEDF1), Color(0xFF1F2937))
+private val LocalIdeExtras = androidx.compose.runtime.staticCompositionLocalOf { DarkExtras }
+
+object IdeTheme {
+    val extras: IdeExtras
+        @Composable get() = LocalIdeExtras.current
+}
+
 @Composable
 fun ConduitTheme(
     darkTheme: Boolean = true,
@@ -63,9 +75,11 @@ fun ConduitTheme(
 ) {
     val colorScheme = if (darkTheme) DarkColors else LightColors
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    androidx.compose.runtime.CompositionLocalProvider(LocalIdeExtras provides if (darkTheme) DarkExtras else LightExtras) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }

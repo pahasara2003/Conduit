@@ -45,10 +45,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
-        )
         ConduitRepository.init(this)
 
         if (forwardIfQuickIntent(intent)) {
@@ -58,7 +54,21 @@ class MainActivity : ComponentActivity() {
         ensureServiceAndPermissions()
 
         setContent {
-            ConduitTheme(darkTheme = true) {
+            val mode by ConduitRepository.themeMode.collectAsState()
+            val dark = when (mode) {
+                "Light" -> false
+                "System" -> androidx.compose.foundation.isSystemInDarkTheme()
+                else -> true
+            }
+            // status/nav bar icons must follow the theme
+            androidx.compose.runtime.SideEffect {
+                val t = android.graphics.Color.TRANSPARENT
+                enableEdgeToEdge(
+                    statusBarStyle = if (dark) SystemBarStyle.dark(t) else SystemBarStyle.light(t, t),
+                    navigationBarStyle = if (dark) SystemBarStyle.dark(t) else SystemBarStyle.light(t, t)
+                )
+            }
+            ConduitTheme(darkTheme = dark) {
                 ConduitIdeRoot(viewModel = viewModel)
             }
         }
@@ -148,6 +158,8 @@ fun ConduitIdeRoot(viewModel: MainViewModel) {
                 onToggleService = { viewModel.toggleService(it) },
                 onUpdatePcHost = { viewModel.updatePcHost(it) },
                 onDiscoverPc = { viewModel.discoverPc() },
+                themeMode = ConduitRepository.themeMode.collectAsState().value,
+                onThemeMode = { ConduitRepository.setThemeMode(it) },
                 onCopyHistory = { viewModel.copyToPhone(it) },
                 onResendHistory = { viewModel.sendText(it) }
             )

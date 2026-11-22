@@ -83,6 +83,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -114,8 +115,7 @@ import com.example.conduit.ui.theme.CodeBg
 import com.example.conduit.ui.theme.CodeBorder
 import com.example.conduit.ui.theme.CodeHeaderBg
 import com.example.conduit.ui.theme.IdeAccent
-import com.example.conduit.ui.theme.IdeTextMutedDark
-import com.example.conduit.ui.theme.IdeUserBubbleDark
+import com.example.conduit.ui.theme.IdeTheme
 import com.example.conduit.ui.theme.StatusError
 import com.example.conduit.ui.theme.StatusOnline
 import com.example.conduit.ui.theme.StatusWarning
@@ -149,7 +149,7 @@ fun IdeWorkspaceScreen(
     }
 
     val statusDotColor by animateColorAsState(
-        targetValue = if (syncState.isPcOnline) StatusOnline else IdeTextMutedDark,
+        targetValue = if (syncState.isPcOnline) StatusOnline else IdeTheme.extras.muted,
         label = "pcDot"
     )
 
@@ -380,7 +380,7 @@ private fun FloatingPromptDock(
                         Text(
                             text = "Ask anything...",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = IdeTextMutedDark
+                            color = IdeTheme.extras.muted
                         )
                     }
                     BasicTextField(
@@ -435,7 +435,7 @@ private fun FloatingPromptDock(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                                 contentDescription = "Send",
-                                tint = if (canSend) Color.White else IdeTextMutedDark,
+                                tint = if (canSend) Color.White else IdeTheme.extras.muted,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -460,7 +460,7 @@ private fun UserPromptPill(item: WorkspaceItem.UserPrompt) {
                 bottomStart = 20.dp,
                 bottomEnd = 6.dp
             ),
-            color = IdeUserBubbleDark
+            color = IdeTheme.extras.userBubble
         ) {
             Text(
                 text = item.text,
@@ -522,6 +522,11 @@ private fun AssistantStreamBlock(
                         onCopy = { onCopy(segment.details) }
                     )
                 }
+                is MarkdownSegment.Image -> MarkdownImage(
+                    segment,
+                    // the agent often embeds a hidden scratch copy; prefer the attached file with the same name
+                    item.files.firstOrNull { it.name == segment.path.substringAfterLast('/') }?.path ?: segment.path
+                )
                 is MarkdownSegment.Divider -> {
                     HorizontalDivider(
                         thickness = 0.5.dp,
@@ -548,19 +553,19 @@ private fun AssistantStreamBlock(
                 Icon(
                     imageVector = Icons.Rounded.ContentCopy,
                     contentDescription = "Copy",
-                    tint = IdeTextMutedDark,
+                    tint = IdeTheme.extras.muted,
                     modifier = Modifier.size(13.dp)
                 )
                 Text(
                     text = "Copy",
                     style = MaterialTheme.typography.labelSmall,
-                    color = IdeTextMutedDark
+                    color = IdeTheme.extras.muted
                 )
             }
             Text(
                 text = item.timestamp,
                 style = MaterialTheme.typography.labelSmall,
-                color = IdeTextMutedDark
+                color = IdeTheme.extras.muted
             )
         }
         if (item.files.isNotEmpty()) {
@@ -574,6 +579,27 @@ private fun formatSize(b: Long): String = when {
     b >= 1_048_576 -> "%.1f MB".format(b / 1_048_576.0)
     b >= 1024 -> "%.0f KB".format(b / 1024.0)
     else -> "$b B"
+}
+
+@Composable
+private fun MarkdownImage(seg: MarkdownSegment.Image, path: String) {
+    val bmp by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, path) {
+        value = com.example.conduit.ConduitRepository.loadPcImage(path)
+    }
+    val shape = RoundedCornerShape(12.dp)
+    val b = bmp
+    if (b != null) {
+        androidx.compose.foundation.Image(
+            bitmap = b.asImageBitmap(),
+            contentDescription = seg.alt,
+            contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
+            modifier = Modifier.fillMaxWidth().clip(shape)
+        )
+    } else {
+        Box(Modifier.fillMaxWidth().height(120.dp).clip(shape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+            Text(seg.alt.ifBlank { "Loading image…" }, style = MaterialTheme.typography.labelMedium, color = IdeTheme.extras.muted)
+        }
+    }
 }
 
 @Composable
@@ -667,13 +693,13 @@ private fun MarkdownInlineText(
             ) {
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = IdeSurfaceBrightDark,
+                    color = IdeTheme.extras.codePill,
                     border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                 ) {
                     Text(
                         text = token.code,
                         style = codeStyle,
-                        color = Color(0xFFE2E8F0),
+                        color = IdeTheme.extras.codePillText,
                         softWrap = false,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
@@ -875,7 +901,7 @@ private fun CollapsibleToolCard(
                 Icon(
                     imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                     contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = IdeTextMutedDark,
+                    tint = IdeTheme.extras.muted,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -919,7 +945,7 @@ private fun CollapsibleToolCard(
                                 Icon(
                                     imageVector = Icons.Rounded.ContentCopy,
                                     contentDescription = "Copy details",
-                                    tint = IdeTextMutedDark,
+                                    tint = IdeTheme.extras.muted,
                                     modifier = Modifier.size(13.dp)
                                 )
                             }
@@ -1403,7 +1429,7 @@ private fun FloatingModelEffortDialog(
                     ) {
                         ReasoningEffort.entries.forEach { effort ->
                             val active = effort == selectedEffort
-                            val labelColor = if (active) getEffortColor(effort.stepIndex.toFloat()) else IdeTextMutedDark
+                            val labelColor = if (active) getEffortColor(effort.stepIndex.toFloat()) else IdeTheme.extras.muted
                             Text(
                                 text = effort.shortLabel,
                                 style = MaterialTheme.typography.labelSmall,
@@ -1423,7 +1449,7 @@ private fun FloatingModelEffortDialog(
                     text = composedModelId,
                     style = MaterialTheme.typography.labelSmall,
                     fontFamily = FontFamily.Monospace,
-                    color = IdeTextMutedDark,
+                    color = IdeTheme.extras.muted,
                     modifier = Modifier.align(Alignment.End)
                 )
             }

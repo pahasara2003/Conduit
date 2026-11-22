@@ -143,6 +143,7 @@ object ConduitRepository {
     private const val PREFS_NAME = "conduit_prefs"
     private const val KEY_PC_HOST = "pc_host"
     private const val KEY_ROUTE_MODE = "route_mode"
+    private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_AI_MODEL = "ai_model"
     const val DEFAULT_AI_MODEL = "gemini-3.8-flash-low"
 
@@ -162,6 +163,7 @@ object ConduitRepository {
         val savedHost = prefs.getString(KEY_PC_HOST, null)?.takeIf { it.isNotBlank() }
             ?: DEFAULT_TAILSCALE_HOST
         val localIp = getLocalWifiIp() ?: "No Wi-Fi"
+        _themeMode.value = prefs.getString(KEY_THEME_MODE, "Dark") ?: "Dark"
         _state.update {
             it.copy(
                 pcHost = savedHost,
@@ -621,6 +623,29 @@ object ConduitRepository {
         Result.failure(lastError)
     }
 
+    private val imageCache = object : android.util.LruCache<String, android.graphics.Bitmap>(24 * 1024 * 1024) {
+        override fun sizeOf(key: String, v: android.graphics.Bitmap) = v.byteCount
+    }
+
+    /** Loads an image that lives on the PC (decoded to at most ~1600px) for inline display. */
+    suspend fun loadPcImage(path: String): android.graphics.Bitmap? = withContext(Dispatchers.IO) {
+        imageCache.get(path)?.let { return@withContext it }
+        val ctx = appContext ?: return@withContext null
+        val q = java.net.URLEncoder.encode(path, "UTF-8")
+        for ((host, _) in buildPcTargets(ctx)) {
+            val bytes = getBytes("http://$host:$PC_PORT/api/files/download?path=$q", readTimeoutMs = 60_000).getOrNull() ?: continue
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (bounds.outWidth / sample > 1600) sample *= 2
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+            val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return@withContext null
+            imageCache.put(path, bmp)
+            return@withContext bmp
+        }
+        null
+    }
+
     private fun mimeFor(name: String): String =
         android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase())
             ?: "application/octet-stream"
@@ -908,6 +933,15 @@ object ConduitRepository {
 
     /** "Auto" tries every route in order; otherwise only the chosen transport label is used. */
     val routeModes = listOf("Auto", "Wi-Fi", "Tailscale", "USB/ADB")
+
+    val themeModes = listOf("Dark", "Light", "System")
+    private val _themeMode = MutableStateFlow("Dark")
+    val themeMode: StateFlow<String> = _themeMode.asStateFlow()
+
+    fun setThemeMode(mode: String) {
+        _themeMode.value = mode
+        appContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.edit()?.putString(KEY_THEME_MODE, mode)?.apply()
+    }
 
     fun getRouteMode(): String =
         appContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.getString(KEY_ROUTE_MODE, "Auto") ?: "Auto"

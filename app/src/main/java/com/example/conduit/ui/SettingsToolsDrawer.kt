@@ -81,7 +81,7 @@ import com.example.conduit.ConduitRepository
 import com.example.conduit.RouteStatus
 import com.example.conduit.ConduitState
 import com.example.conduit.SshInfo
-import com.example.conduit.ui.theme.IdeTextMutedDark
+import com.example.conduit.ui.theme.IdeTheme
 import com.example.conduit.ui.theme.StatusError
 import com.example.conduit.ui.theme.StatusOnline
 
@@ -100,6 +100,8 @@ fun SettingsToolsDrawer(
     onToggleService: (Boolean) -> Unit,
     onUpdatePcHost: (String) -> Unit,
     onDiscoverPc: () -> Unit,
+    themeMode: String,
+    onThemeMode: (String) -> Unit,
     onCopyHistory: (String) -> Unit,
     onResendHistory: (String) -> Unit
 ) {
@@ -164,7 +166,7 @@ fun SettingsToolsDrawer(
             Text(
                 text = "Recent",
                 style = MaterialTheme.typography.labelSmall,
-                color = IdeTextMutedDark,
+                color = IdeTheme.extras.muted,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp)
             )
 
@@ -180,7 +182,7 @@ fun SettingsToolsDrawer(
                         Text(
                             text = "No conversations yet",
                             style = MaterialTheme.typography.bodySmall,
-                            color = IdeTextMutedDark,
+                            color = IdeTheme.extras.muted,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 14.dp)
                         )
                     }
@@ -245,7 +247,7 @@ fun SettingsToolsDrawer(
                                             .clip(CircleShape)
                                             .background(
                                                 if (session.status == "open") StatusOnline
-                                                else IdeTextMutedDark.copy(alpha = 0.5f)
+                                                else IdeTheme.extras.muted.copy(alpha = 0.5f)
                                             )
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
@@ -259,7 +261,7 @@ fun SettingsToolsDrawer(
                                         Text(
                                             text = session.modelLabel,
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = IdeTextMutedDark,
+                                            color = IdeTheme.extras.muted,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -271,7 +273,7 @@ fun SettingsToolsDrawer(
                                         Icon(
                                             imageVector = Icons.Rounded.DeleteOutline,
                                             contentDescription = "Delete chat",
-                                            tint = IdeTextMutedDark,
+                                            tint = IdeTheme.extras.muted,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
@@ -359,7 +361,7 @@ fun SettingsToolsDrawer(
                                     Icon(
                                         imageVector = Icons.Rounded.ContentCopy,
                                         contentDescription = "Copy",
-                                        tint = IdeTextMutedDark,
+                                        tint = IdeTheme.extras.muted,
                                         modifier = Modifier
                                             .padding(start = 8.dp)
                                             .size(14.dp)
@@ -380,6 +382,20 @@ fun SettingsToolsDrawer(
                     CompactSshPanel(pcHost = state.pcHost)
                 }
 
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text("Theme", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    ConduitRepository.themeModes.forEach { m ->
+                        androidx.compose.material3.FilterChip(
+                            selected = themeMode == m,
+                            onClick = { onThemeMode(m) },
+                            label = { Text(m, style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
                 DrawerSectionRow(
                     icon = Icons.Rounded.Settings,
                     title = "Connection Settings",
@@ -523,7 +539,7 @@ private fun DrawerSectionRow(
         Icon(
             imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
             contentDescription = null,
-            tint = IdeTextMutedDark,
+            tint = IdeTheme.extras.muted,
             modifier = Modifier.size(18.dp)
         )
     }

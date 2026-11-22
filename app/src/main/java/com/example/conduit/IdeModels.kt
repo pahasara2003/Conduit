@@ -145,8 +145,11 @@ sealed class MarkdownSegment {
         val headers: List<String>,
         val rows: List<List<String>>
     ) : MarkdownSegment()
+    data class Image(val alt: String, val path: String) : MarkdownSegment()
     data object Divider : MarkdownSegment()
 }
+
+private val IMAGE_LINE_REGEX = Regex("""^!\[([^\]]*)]\(\s*<?([^)>]+?)>?\s*\)$""")
 
 private val TOOL_LINE_REGEX = Regex(
     """^(?:[●▸•]\s*(?:Ran|Explored|Edited|Created|Updated|Read|Searched|Thought(?:\s+for)?|Executed)\b.*|\[Ran\s+[^\]]+\].*)$"""
@@ -248,6 +251,17 @@ fun parseMarkdownSegments(raw: String): List<MarkdownSegment> {
             flushParagraph()
             i++
             continue
+        }
+
+        // Standalone markdown image on a local PC path: ![alt](/home/me/plot.png)
+        IMAGE_LINE_REGEX.matchEntire(trimmed)?.let { m ->
+            val target = m.groupValues[2].removePrefix("file://")
+            if (target.startsWith("/")) {
+                flushParagraph()
+                segments.add(MarkdownSegment.Image(m.groupValues[1], target))
+                i++
+                continue
+            }
         }
 
         // Tool activity lines (e.g. "● Ran `fastfetch`", "● Ran 2 commands ...", "● Edited ...", "● Thought for ...")
@@ -437,7 +451,7 @@ private val INLINE_MD_REGEX = Regex(
 
 fun parseInlineMarkdown(
     text: String,
-    inlineCodeColor: Color = Color(0xFFE2E8F0),
+    inlineCodeColor: Color = Color.Unspecified, // inherit the text colour so it reads in both themes
     linkColor: Color = IdeAccent
 ): AnnotatedString = buildAnnotatedString {
     var cursor = 0
