@@ -2,10 +2,6 @@
 ### Minimalist Mobile AI IDE & Workstation Bridge
 
 <p align="center">
-  <img src="shot.png" alt="Conduit Mobile Interface" width="280" />
-</p>
-
-<p align="center">
   <b>Conduit</b> turns your Android phone into an ultra-fast, distraction-free mobile terminal and AI IDE powered directly by your desktop workstation over Tailscale. Zero external paid API middle-layers, zero cloud dependency.
 </p>
 
